@@ -39,7 +39,7 @@ export default function Navbar({
               text-lg md:text-xl
               font-semibold
             ">
-              Tailor ERP
+              Nice Creation
             </h1>
 
             <p className="

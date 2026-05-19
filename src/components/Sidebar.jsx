@@ -90,7 +90,7 @@ export default function Sidebar({
             <h2 className="
               text-lg font-semibold
             ">
-              Tailor ERP
+              Nice Creation
             </h2>
 
             <p className="
