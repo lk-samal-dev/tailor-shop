@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useLocation }from "react-router-dom";
-import { useEffect }from "react";
+import { useLocation } from "react-router-dom";
+import { useEffect, useRef } from "react";
 
 import {
   collection,
@@ -12,6 +12,7 @@ import {
 
 import { db } from "../firebase/config";
 
+import Toast from "../components/Toast";
 
 // ========================================
 // FIELD COMPONENT
@@ -23,23 +24,44 @@ function Field({
   value,
   onChange,
   placeholder,
+  inputRef,
+  onNext,
 }) {
+
+  const handleInput = (e) => {
+
+    let value = e.target.value;
+
+    value = value.replace(
+      /[^0-9./ ]/g,
+      ""
+    );
+
+    onChange({
+      target: {
+        name,
+        value,
+      },
+    });
+  };
 
   return (
 
     <div>
 
       <label className="
-        text-xs text-gray-500
-        mb-1 block
+        text-xs
+        text-gray-500
+        mb-1
+        block
       ">
         {label}
       </label>
 
       <input
-        type="number"
+        ref={inputRef}
 
-        step="0.1"
+        type="text"
 
         inputMode="decimal"
 
@@ -49,17 +71,30 @@ function Field({
 
         value={value}
 
-        onChange={onChange}
+        onChange={handleInput}
 
-        placeholder={placeholder}
+        onKeyDown={(e) => {
 
-        onWheel={(e) =>
-          e.target.blur()
+          if (
+            e.key === "Enter" &&
+            onNext
+          ) {
+
+            e.preventDefault();
+
+            onNext();
+          }
+        }}
+
+        placeholder={
+          placeholder || "e.g. 20.5"
         }
 
         className="
           w-full
+
           border border-gray-200
+
           bg-white
 
           rounded-xl
@@ -88,7 +123,11 @@ export default function SmartMeasurement() {
   // ========================================
 
   const [activeTab, setActiveTab] =
-    useState("kamij");
+    useState(
+      localStorage.getItem(
+        "lastMeasurementTab"
+      ) || "kamij"
+    );
 
   const [customerFound,
     setCustomerFound] =
@@ -106,9 +145,37 @@ export default function SmartMeasurement() {
     setLoading] =
     useState(false);
 
+  const [saving,
+    setSaving] =
+    useState(false);
+
+  const [toastOpen,
+    setToastOpen] =
+    useState(false);
+
+  const [toastMessage,
+    setToastMessage] =
+    useState("");
+
+  const [toastType,
+    setToastType] =
+    useState("success");
+
   const location = useLocation();
 
-const customerData = location.state;
+  const customerData =
+    location.state;
+
+  // ========================================
+  // REFS
+  // ========================================
+
+  const fieldRefs =
+    useRef([]);
+
+  // ========================================
+  // FORM DATA
+  // ========================================
 
   const [formData, setFormData] =
     useState({
@@ -120,6 +187,8 @@ const customerData = location.state;
         new Date()
           .toISOString()
           .split("T")[0],
+
+      note: "",
 
       // KAMIJ
 
@@ -150,33 +219,105 @@ const customerData = location.state;
       blouseSleeve: "",
     });
 
-        useEffect(() => {
+  // ========================================
+  // TOAST
+  // ========================================
 
-      if (customerData) {
+  const showToast = (
+    message,
+    type = "success"
+  ) => {
 
-        setFormData((prev) => ({
+    setToastMessage(message);
 
-          ...prev,
+    setToastType(type);
 
-          phone:
-            customerData.customerPhone || "",
+    setToastOpen(true);
+  };
 
-          name:
-            customerData.customerName || "",
-        }));
+  // ========================================
+  // PREFILL CUSTOMER
+  // ========================================
 
-        setCustomerId(
-          customerData.customerId
-        );
+  useEffect(() => {
 
-        setCustomerFound(true);
+    if (customerData) {
 
-        fetchMeasurementCount(
-          customerData.customerId
-        );
+      setFormData((prev) => ({
+
+        ...prev,
+
+        phone:
+          customerData.customerPhone || "",
+
+        name:
+          customerData.customerName || "",
+      }));
+
+      setCustomerId(
+        customerData.customerId
+      );
+
+      setCustomerFound(true);
+
+      fetchMeasurementCount(
+        customerData.customerId
+      );
+    }
+
+  }, []);
+
+  // ========================================
+  // SAVE LAST TAB
+  // ========================================
+
+  useEffect(() => {
+
+    localStorage.setItem(
+      "lastMeasurementTab",
+      activeTab
+    );
+
+  }, [activeTab]);
+
+  // ========================================
+  // UNSAVED WARNING
+  // ========================================
+
+  useEffect(() => {
+
+    const handleBeforeUnload =
+      (e) => {
+
+      const hasChanges =
+        Object.values(formData)
+          .some(
+            (value) =>
+              value !== ""
+          );
+
+      if (hasChanges) {
+
+        e.preventDefault();
+
+        e.returnValue = "";
       }
+    };
 
-    }, []);
+    window.addEventListener(
+      "beforeunload",
+      handleBeforeUnload
+    );
+
+    return () => {
+
+      window.removeEventListener(
+        "beforeunload",
+        handleBeforeUnload
+      );
+    };
+
+  }, [formData]);
 
   // ========================================
   // CHANGE
@@ -184,8 +325,19 @@ const customerData = location.state;
 
   const handleChange = (e) => {
 
-    const { name, value } =
+    const { name } =
       e.target;
+
+    let value =
+      e.target.value;
+
+    if (name === "name") {
+
+      value = value.replace(
+        /[^a-zA-Z ]/g,
+        ""
+      );
+    }
 
     setFormData((prev) => ({
       ...prev,
@@ -200,13 +352,18 @@ const customerData = location.state;
   const checkCustomer =
     async (mobile) => {
 
-    if (mobile.length < 10) return;
+    if (mobile.length < 10)
+      return;
 
     try {
 
       const q = query(
         collection(db, "customers"),
-        where("mobile", "==", mobile)
+        where(
+          "mobile",
+          "==",
+          mobile
+        )
       );
 
       const querySnapshot =
@@ -229,10 +386,11 @@ const customerData = location.state;
           name: data.name,
         }));
 
-        // COUNT
-
         const mq = query(
-          collection(db, "measurements"),
+          collection(
+            db,
+            "measurements"
+          ),
           where(
             "customerId",
             "==",
@@ -243,7 +401,9 @@ const customerData = location.state;
         const ms =
           await getDocs(mq);
 
-        setMeasurementCount(ms.size);
+        setMeasurementCount(
+          ms.size
+        );
 
       } else {
 
@@ -257,29 +417,47 @@ const customerData = location.state;
     } catch (error) {
 
       console.error(error);
+
+      showToast(
+        "Network Error",
+        "error"
+      );
     }
   };
 
+  // ========================================
+  // FETCH COUNT
+  // ========================================
+
   const fetchMeasurementCount =
-  async (id) => {
+    async (id) => {
 
-  try {
+    try {
 
-    const mq = query(
-      collection(db, "measurements"),
-      where("customerId", "==", id)
-    );
+      const mq = query(
+        collection(
+          db,
+          "measurements"
+        ),
+        where(
+          "customerId",
+          "==",
+          id
+        )
+      );
 
-    const ms =
-      await getDocs(mq);
+      const ms =
+        await getDocs(mq);
 
-    setMeasurementCount(ms.size);
+      setMeasurementCount(
+        ms.size
+      );
 
-  } catch (error) {
+    } catch (error) {
 
-    console.error(error);
-  }
-};
+      console.error(error);
+    }
+  };
 
   // ========================================
   // PHONE CHANGE
@@ -289,7 +467,10 @@ const customerData = location.state;
     async (e) => {
 
     const value =
-      e.target.value;
+      e.target.value.replace(
+        /[^0-9]/g,
+        ""
+      );
 
     setFormData((prev) => ({
       ...prev,
@@ -303,30 +484,226 @@ const customerData = location.state;
   };
 
   // ========================================
+  // RANGE VALIDATION
+  // ========================================
+
+  const validateMeasurement =
+    (value) => {
+
+    const number =
+      parseFloat(value);
+
+    if (
+      isNaN(number)
+    ) return false;
+
+    return (
+      number >= 1 &&
+      number <= 100
+    );
+  };
+
+  // ========================================
   // SAVE
   // ========================================
 
   const handleSubmit =
     async () => {
 
+    if (
+      !formData.phone.trim()
+    ) {
+
+      showToast(
+        "Enter Phone Number",
+        "error"
+      );
+
+      return;
+    }
+
+    if (
+      !/^[0-9]{10}$/.test(
+        formData.phone
+      )
+    ) {
+
+      showToast(
+        "Enter valid 10 digit phone number",
+        "error"
+      );
+
+      return;
+    }
+
+    if (
+      !formData.name.trim()
+    ) {
+
+      showToast(
+        "Enter Customer Name",
+        "error"
+      );
+
+      return;
+    }
+
+    const requiredFields = {
+
+      kamij: [
+        "shoulder",
+        "chest",
+        "length",
+      ],
+
+      pant: [
+        "pantWaist",
+        "pantLength",
+      ],
+
+      blouse: [
+        "blouseChest",
+        "blouseLength",
+      ],
+    };
+
+    const missing =
+      requiredFields[
+        activeTab
+      ].find(
+        (field) =>
+          !formData[field]
+            ?.trim()
+      );
+
+    if (missing) {
+
+      showToast(
+        `Enter ${missing}`,
+        "error"
+      );
+
+      return;
+    }
+
+    // RANGE CHECK
+
+    const invalidField =
+      Object.entries(formData)
+        .find(
+          ([key, value]) => {
+
+            if (
+              [
+                "name",
+                "phone",
+                "measurementDate",
+                "note",
+              ].includes(key)
+            ) {
+
+              return false;
+            }
+
+            if (!value) return false;
+
+            return !validateMeasurement(
+              value
+            );
+          }
+        );
+
+    if (invalidField) {
+
+      showToast(
+        `${invalidField[0]} value looks invalid`,
+        "error"
+      );
+
+      return;
+    }
+
+    if (saving) return;
+
     try {
+
+      setSaving(true);
 
       setLoading(true);
 
       let finalCustomerId =
         customerId;
 
+      // ========================================
+      // SAME DAY WARNING
+      // ========================================
+
+      if (customerFound) {
+
+        const sameDayQuery =
+          query(
+            collection(
+              db,
+              "measurements"
+            ),
+            where(
+              "customerId",
+              "==",
+              customerId
+            ),
+            where(
+              "measurementDate",
+              "==",
+              formData.measurementDate
+            ),
+            where(
+              "type",
+              "==",
+              activeTab
+            )
+          );
+
+        const sameDayResult =
+          await getDocs(
+            sameDayQuery
+          );
+
+        if (
+          !sameDayResult.empty
+        ) {
+
+          showToast(
+            "Measurement already exists for today",
+            "error"
+          );
+
+          setSaving(false);
+
+          setLoading(false);
+
+          return;
+        }
+      }
+
+      // ========================================
       // CREATE CUSTOMER
+      // ========================================
 
       if (!customerFound) {
 
         const customerRef =
           await addDoc(
-            collection(db, "customers"),
+            collection(
+              db,
+              "customers"
+            ),
             {
-              name: formData.name,
+              name:
+                formData.name.trim(),
+
               mobile:
-                formData.phone,
+                formData.phone.trim(),
+
               createdAt:
                 new Date(),
             }
@@ -336,11 +713,16 @@ const customerData = location.state;
           customerRef.id;
       }
 
-      let measurementData = {};
+      let measurementData =
+        {};
 
+      // ========================================
       // KAMIJ
+      // ========================================
 
-      if (activeTab === "kamij") {
+      if (
+        activeTab === "kamij"
+      ) {
 
         measurementData = {
 
@@ -370,9 +752,13 @@ const customerData = location.state;
         };
       }
 
+      // ========================================
       // PANT
+      // ========================================
 
-      if (activeTab === "pant") {
+      if (
+        activeTab === "pant"
+      ) {
 
         measurementData = {
 
@@ -393,9 +779,13 @@ const customerData = location.state;
         };
       }
 
+      // ========================================
       // BLOUSE
+      // ========================================
 
-      if (activeTab === "blouse") {
+      if (
+        activeTab === "blouse"
+      ) {
 
         measurementData = {
 
@@ -419,24 +809,32 @@ const customerData = location.state;
         };
       }
 
+      // ========================================
       // SAVE
+      // ========================================
 
       await addDoc(
-        collection(db, "measurements"),
+        collection(
+          db,
+          "measurements"
+        ),
         {
           customerId:
             finalCustomerId,
 
           customerName:
-            formData.name,
+            formData.name.trim(),
 
           customerPhone:
-            formData.phone,
+            formData.phone.trim(),
 
           type: activeTab,
 
           measurementDate:
             formData.measurementDate,
+
+          note:
+            formData.note.trim(),
 
           data: measurementData,
 
@@ -445,20 +843,97 @@ const customerData = location.state;
         }
       );
 
-      alert(
+      showToast(
         "Measurement Saved Successfully"
       );
+
+      // RESET
+
+     setFormData({
+
+  phone: "",
+  name: "",
+
+  measurementDate:
+    new Date()
+      .toISOString()
+      .split("T")[0],
+
+  note: "",
+
+  // KAMIJ
+
+  shoulder: "",
+  chest: "",
+  upperChest: "",
+  waist: "",
+  hip: "",
+  length: "",
+  sleeve: "",
+  bicep: "",
+
+  // PANT
+
+  pantWaist: "",
+  pantLength: "",
+  thigh: "",
+  knee: "",
+  mori: "",
+
+  // BLOUSE
+
+  blouseLength: "",
+  blouseChest: "",
+  blouseWaist: "",
+  frontNeck: "",
+  backNeck: "",
+  blouseSleeve: "",
+});
+
+setCustomerFound(false);
+
+setCustomerId(null);
+
+setMeasurementCount(0);
+
+      setMeasurementCount(
+        (prev) => prev + 1
+      );
+
+      setTimeout(() => {
+
+        fieldRefs.current[0]
+          ?.focus();
+
+      }, 100);
 
     } catch (error) {
 
       console.error(error);
 
-      alert("Error saving");
+      showToast(
+        "Error saving measurement",
+        "error"
+      );
 
     } finally {
 
       setLoading(false);
+
+      setSaving(false);
     }
+  };
+
+  // ========================================
+  // FIELD NAVIGATION
+  // ========================================
+
+  const focusNext =
+    (index) => {
+
+    fieldRefs.current[
+      index + 1
+    ]?.focus();
   };
 
   // ========================================
@@ -466,16 +941,17 @@ const customerData = location.state;
   // ========================================
 
   return (
+
     <div className="
-        pb-28
-        space-y-4
+      pb-28
+      space-y-4
 
-        min-h-screen
+      min-h-screen
 
-        bg-[#f5f7fb]
+      bg-[#f5f7fb]
 
-        text-gray-800
-      ">
+      text-gray-800
+    ">
 
       {/* HEADER */}
 
@@ -517,11 +993,15 @@ const customerData = location.state;
               text-xs text-gray-500
               mb-1 block
             ">
-              Phone
+              Customer Phone
             </label>
 
             <input
               type="text"
+
+              inputMode="numeric"
+
+              maxLength={10}
 
               value={formData.phone}
 
@@ -530,7 +1010,7 @@ const customerData = location.state;
               }
 
               placeholder="
-                Customer phone
+                Customer Phone
               "
 
               className="
@@ -563,7 +1043,7 @@ const customerData = location.state;
               onChange={handleChange}
 
               placeholder="
-                Customer name
+                Customer Name
               "
 
               className="
@@ -636,67 +1116,67 @@ const customerData = location.state;
       {/* TYPE */}
 
       <div className="
-  bg-[#e8edf7]
-  p-1
-  rounded-2xl
-  flex
-  gap-1
-">
+        bg-[#e8edf7]
+        p-1
+        rounded-2xl
+        flex
+        gap-1
+      ">
 
-  {[
-    {
-      key: "kamij",
-      label: "Kamij"
-    },
+        {[
+          {
+            key: "kamij",
+            label: "Kamij"
+          },
 
-    {
-      key: "pant",
-      label: "Pant"
-    },
+          {
+            key: "pant",
+            label: "Pant"
+          },
 
-    {
-      key: "blouse",
-      label: "Blouse"
-    },
+          {
+            key: "blouse",
+            label: "Blouse"
+          },
 
-  ].map((tab) => (
+        ].map((tab) => (
 
-    <button
-      key={tab.key}
+          <button
+            key={tab.key}
 
-      onClick={() =>
-        setActiveTab(tab.key)
-      }
+            onClick={() =>
+              setActiveTab(tab.key)
+            }
 
-      className={`
-        flex-1
+            className={`
+              flex-1
 
-        py-2.5
+              py-2.5
 
-        rounded-xl
+              rounded-xl
 
-        text-sm
-        font-semibold
+              text-sm
+              font-semibold
 
-        transition-all
+              transition-all
 
-        ${
-          activeTab === tab.key
+              ${
+                activeTab === tab.key
 
-          ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm"
+                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm"
 
-          : "text-gray-600 hover:bg-white/70"
-        }
-      `}
-    >
+                : "text-gray-600 hover:bg-white/70"
+              }
+            `}
+          >
 
-      {tab.label}
+            {tab.label}
 
-    </button>
+          </button>
 
-  ))}
+        ))}
 
-</div>
+      </div>
 
       {/* DATE */}
 
@@ -718,6 +1198,12 @@ const customerData = location.state;
         <input
           type="date"
 
+          max={
+            new Date()
+              .toISOString()
+              .split("T")[0]
+          }
+
           name="measurementDate"
 
           value={
@@ -737,97 +1223,128 @@ const customerData = location.state;
 
       </div>
 
+      {/* NOTE */}
+
+      <div className="
+        bg-white
+        rounded-2xl
+        border border-gray-100
+        shadow-sm
+        p-4
+      ">
+
+        <label className="
+          text-xs text-gray-500
+          mb-1 block
+        ">
+          Additional Note
+        </label>
+
+        <textarea
+          name="note"
+
+          value={formData.note}
+
+          onChange={handleChange}
+
+          placeholder="
+            Cloth note, design note, delivery note...
+          "
+
+          className="
+            w-full
+
+            border border-gray-200
+
+            rounded-xl
+
+            px-3 py-3
+
+            text-sm
+
+            min-h-[90px]
+
+            resize-none
+          "
+        />
+
+      </div>
+
       {/* KAMIJ */}
 
       {activeTab === "kamij" && (
 
-        <>
+        <div className="
+          bg-[#f5f9ff]
+
+          rounded-2xl
+
+          border border-blue-100
+
+          shadow-sm
+
+          p-4
+        ">
+
+          <h2 className="
+            text-sm
+            font-semibold
+
+            mb-4
+
+            text-blue-700
+          ">
+            Kamij Measurements
+          </h2>
+
           <div className="
-            bg-white
-            rounded-2xl
-            border border-gray-100
-            shadow-sm
-            p-4
+            grid
+            grid-cols-2
+
+            gap-3
           ">
 
-            <h2 className="
-              text-sm font-semibold
-              mb-4
-            ">
-              Body
-            </h2>
+            {[
+              ["Shoulder", "shoulder"],
+              ["Chest", "chest"],
+              ["Upper Chest", "upperChest"],
+              ["Waist", "waist"],
+              ["Hip", "hip"],
+              ["Length", "length"],
+              ["Sleeve", "sleeve"],
+              ["Bicep", "bicep"],
+            ].map(
+              ([label, name], index) => (
 
-            <div className="
-              grid grid-cols-2
-              gap-3
-            ">
+              <Field
+                key={name}
 
-              <Field label="Shoulder" name="shoulder" value={formData.shoulder} onChange={handleChange} />
-              <Field label="Chest" name="chest" value={formData.chest} onChange={handleChange} />
-              <Field label="Upper Chest" name="upperChest" value={formData.upperChest} onChange={handleChange} />
-              <Field label="Waist" name="waist" value={formData.waist} onChange={handleChange} />
+                label={label}
 
-            </div>
+                name={name}
+
+                value={formData[name]}
+
+                onChange={handleChange}
+
+                inputRef={(el) =>
+                  fieldRefs.current[index] = el
+                }
+
+                onNext={() =>
+                  focusNext(index)
+                }
+              />
+
+            ))}
 
           </div>
 
-          <div className="
-            bg-white
-            rounded-2xl
-            border border-gray-100
-            shadow-sm
-            p-4
-          ">
+        </div>
 
-            <h2 className="
-              text-sm font-semibold
-              mb-4
-            ">
-              Length
-            </h2>
-
-            <div className="
-              grid grid-cols-2
-              gap-3
-            ">
-
-              <Field label="Hip" name="hip" value={formData.hip} onChange={handleChange} />
-              <Field label="Length" name="length" value={formData.length} onChange={handleChange} />
-
-            </div>
-
-          </div>
-
-          <div className="
-            bg-white
-            rounded-2xl
-            border border-gray-100
-            shadow-sm
-            p-4
-          ">
-
-            <h2 className="
-              text-sm font-semibold
-              mb-4
-            ">
-              Sleeve
-            </h2>
-
-            <div className="
-              grid grid-cols-2
-              gap-3
-            ">
-
-              <Field label="Sleeve" name="sleeve" value={formData.sleeve} onChange={handleChange} />
-              <Field label="Bicep" name="bicep" value={formData.bicep} onChange={handleChange} />
-
-            </div>
-
-          </div>
-        </>
       )}
 
-            {/* PANT */}
+      {/* PANT */}
 
       {activeTab === "pant" && (
 
@@ -851,40 +1368,36 @@ const customerData = location.state;
             gap-3
           ">
 
-            <Field
-              label="Waist"
-              name="pantWaist"
-              value={formData.pantWaist}
-              onChange={handleChange}
-            />
+            {[
+              ["Waist", "pantWaist"],
+              ["Length", "pantLength"],
+              ["Thigh", "thigh"],
+              ["Knee", "knee"],
+              ["Mori", "mori"],
+            ].map(
+              ([label, name], index) => (
 
-            <Field
-              label="Length"
-              name="pantLength"
-              value={formData.pantLength}
-              onChange={handleChange}
-            />
+              <Field
+                key={name}
 
-            <Field
-              label="Thigh"
-              name="thigh"
-              value={formData.thigh}
-              onChange={handleChange}
-            />
+                label={label}
 
-            <Field
-              label="Knee"
-              name="knee"
-              value={formData.knee}
-              onChange={handleChange}
-            />
+                name={name}
 
-            <Field
-              label="Mori"
-              name="mori"
-              value={formData.mori}
-              onChange={handleChange}
-            />
+                value={formData[name]}
+
+                onChange={handleChange}
+
+                inputRef={(el) =>
+                  fieldRefs.current[index] = el
+                }
+
+                onNext={() =>
+                  focusNext(index)
+                }
+              />
+
+            ))}
 
           </div>
 
@@ -916,55 +1429,43 @@ const customerData = location.state;
             gap-3
           ">
 
-            <Field
-              label="Length"
-              name="blouseLength"
-              value={formData.blouseLength}
-              onChange={handleChange}
-            />
+            {[
+              ["Length", "blouseLength"],
+              ["Chest", "blouseChest"],
+              ["Waist", "blouseWaist"],
+              ["Front Neck", "frontNeck"],
+              ["Back Neck", "backNeck"],
+              ["Sleeve", "blouseSleeve"],
+            ].map(
+              ([label, name], index) => (
 
-            <Field
-              label="Chest"
-              name="blouseChest"
-              value={formData.blouseChest}
-              onChange={handleChange}
-            />
+              <Field
+                key={name}
 
-            <Field
-              label="Waist"
-              name="blouseWaist"
-              value={formData.blouseWaist}
-              onChange={handleChange}
-            />
+                label={label}
 
-            <Field
-              label="Front Neck"
-              name="frontNeck"
-              value={formData.frontNeck}
-              onChange={handleChange}
-            />
+                name={name}
 
-            <Field
-              label="Back Neck"
-              name="backNeck"
-              value={formData.backNeck}
-              onChange={handleChange}
-            />
+                value={formData[name]}
 
-            <Field
-              label="Sleeve"
-              name="blouseSleeve"
-              value={formData.blouseSleeve}
-              onChange={handleChange}
-            />
+                onChange={handleChange}
+
+                inputRef={(el) =>
+                  fieldRefs.current[index] = el
+                }
+
+                onNext={() =>
+                  focusNext(index)
+                }
+              />
+
+            ))}
 
           </div>
 
         </div>
 
       )}
-
-
 
       {/* SAVE */}
 
@@ -983,13 +1484,17 @@ const customerData = location.state;
         <button
           onClick={handleSubmit}
 
-          disabled={loading}
+          disabled={
+            loading || saving
+          }
 
           className="
             w-full
 
             bg-blue-600
             hover:bg-blue-700
+
+            disabled:opacity-60
 
             text-white
 
@@ -1004,13 +1509,24 @@ const customerData = location.state;
           "
         >
 
-          {loading
+          {loading || saving
             ? "Saving..."
             : "Save Measurement"}
 
         </button>
 
       </div>
+
+      {/* TOAST */}
+
+      <Toast
+        open={toastOpen}
+        message={toastMessage}
+        type={toastType}
+        onClose={() =>
+          setToastOpen(false)
+        }
+      />
 
     </div>
   );
