@@ -725,21 +725,43 @@ export default function EmployeeProfile() {
           gap-4
         ">
 
-          <div>
+          <div className="flex items-center gap-3">
 
-            <h1 className="
-              text-2xl font-bold
-            ">
-              {employee?.name}
-            </h1>
+              <button
+                onClick={() => navigate("/employees")}
+                className="
+                  h-9 w-9
+                  flex items-center justify-center
+                  rounded-xl
+                  bg-white/10
+                  border border-white/20
+                  text-white
+                  hover:bg-white/20
+                  transition-colors
+                  shrink-0
+                "
+                title="Back to Employees"
+              >
+                <i className="fa-solid fa-arrow-left text-sm"></i>
+              </button>
 
-            <p className="
-              text-slate-300 mt-1
-            ">
-              {employee?.mobile}
-            </p>
+              <div>
 
-          </div>
+                <h1 className="
+                  text-2xl font-bold
+                ">
+                  {employee?.name}
+                </h1>
+
+                <p className="
+                  text-slate-300 mt-1
+                ">
+                  {employee?.mobile}
+                </p>
+
+              </div>
+
+            </div>
 
           <div className="flex gap-2">
 
