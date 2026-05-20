@@ -125,8 +125,9 @@ export default function EmployeeProfile() {
       paymentNote: "",
     });
 
-    const [saving, setSaving] =
-            useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [updating, setUpdating] = useState(false);
 
   // =========================
   // FETCH EMPLOYEE
@@ -311,55 +312,56 @@ export default function EmployeeProfile() {
   // =========================
 
   const saveIncome = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (saving) return;
+    if (saving) return;
 
-  setSaving(true);
+    setSaving(true);
 
-  try {
-    // Validation
+    // FIX 4: setSaving(false) before every validation return
     if (!incomeData.dailyIncome) {
       showToast("Enter Daily Income", "error");
+      setSaving(false);
       return;
     }
 
     if (Number(incomeData.dailyIncome) <= 0) {
       showToast("Income must be greater than 0", "error");
+      setSaving(false);
       return;
     }
 
-    // Save to Firestore
-    await addDoc(
-      collection(db, "employee_income"),
-      {
-        employeeId: id,
-        ...incomeData,
-        createdAt: new Date(),
-      }
-    );
+    try {
 
-    // Reset form
-    setIncomeData({
-      incomeDate: new Date().toISOString().split("T")[0],
-      dailyIncome: "",
-      workNote: "",
-    });
+      await addDoc(
+        collection(db, "employee_income"),
+        {
+          employeeId: id,
+          ...incomeData,
+          createdAt: new Date(),
+        }
+      );
 
-    // Refresh data
-    fetchIncome();
+      setIncomeData({
+        incomeDate: new Date().toISOString().split("T")[0],
+        dailyIncome: "",
+        workNote: "",
+      });
 
-    showToast("Income Added");
+      fetchIncome();
 
-  } catch (error) {
-    console.error(error);
+      showToast("Income Added");
 
-    showToast("Failed To Save", "error");
+    } catch (error) {
 
-  } finally {
-    setSaving(false);
-  }
-};
+      console.error(error);
+
+      showToast("Failed To Save", "error");
+
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // =========================
   // SAVE PAYMENT
@@ -368,41 +370,29 @@ export default function EmployeeProfile() {
   const savePayment = async (e) => {
 
     e.preventDefault();
-    
+
+    if (saving) return;
+
+    setSaving(true);
+
+    // FIX 3: setSaving(false) before every validation return
     if (!paymentData.amountPaid) {
+      showToast("Enter Payment Amount", "error");
+      setSaving(false);
+      return;
+    }
 
-  showToast(
-    "Enter Payment Amount",
-    "error"
-  );
+    if (Number(paymentData.amountPaid) <= 0) {
+      showToast("Payment must be greater than 0", "error");
+      setSaving(false);
+      return;
+    }
 
-  return;
-}
-
-if (
-  Number(paymentData.amountPaid) <= 0
-) {
-
-  showToast(
-    "Payment must be greater than 0",
-    "error"
-  );
-
-  return;
-}
-
-if (
-  Number(paymentData.amountPaid) >
-  remaining
-) {
-
-  showToast(
-    "Payment exceeds remaining salary",
-    "error"
-  );
-
-  return;
-}
+    if (Number(paymentData.amountPaid) > remaining) {
+      showToast("Payment exceeds remaining salary", "error");
+      setSaving(false);
+      return;
+    }
 
     try {
 
@@ -433,18 +423,17 @@ if (
 
       fetchPayments();
 
-      showToast(
-        "Payment Added"
-      );
+      showToast("Payment Added");
 
     } catch (error) {
 
       console.error(error);
 
-      showToast(
-        "Failed To Save",
-        "error"
-      );
+      showToast("Failed To Save", "error");
+
+    } finally {
+
+      setSaving(false);
     }
   };
 
@@ -453,30 +442,21 @@ if (
   // =========================
 
   const updateEmployee = async () => {
+    if (updating) return;
+
+    setUpdating(true);
 
     if (!editEmployeeData.name.trim()) {
+      showToast("Enter Employee Name", "error");
+      setUpdating(false);
+      return;
+    }
 
-    showToast(
-      "Enter Employee Name",
-      "error"
-  );
-
-  return;
-}
-
-if (
-  !/^[0-9]{10}$/.test(
-    editEmployeeData.mobile
-  )
-) {
-
-  showToast(
-    "Enter valid 10 digit mobile number",
-    "error"
-  );
-
-  return;
-}
+    if (!/^[0-9]{10}$/.test(editEmployeeData.mobile)) {
+      showToast("Enter valid 10 digit mobile number", "error");
+      setUpdating(false);
+      return;
+    }
 
     try {
 
@@ -492,13 +472,17 @@ if (
 
       setEditingEmployee(false);
 
-      showToast(
-        "Employee Updated"
-      );
+      showToast("Employee Updated");
 
     } catch (error) {
 
       console.error(error);
+
+      showToast("Failed To Update", "error");
+
+    } finally {
+
+      setUpdating(false);
     }
   };
 
@@ -510,9 +494,52 @@ if (
 
     try {
 
+      // DELETE INCOME
+
+      const incomeQuery = query(
+        collection(db, "employee_income"),
+        where("employeeId", "==", id)
+      );
+
+      const incomeSnap =
+        await getDocs(incomeQuery);
+
+      await Promise.all(
+        incomeSnap.docs.map(
+          (docItem) =>
+            deleteDoc(
+              doc(db, "employee_income", docItem.id)
+            )
+        )
+      );
+
+      // DELETE PAYMENTS
+
+      const paymentQuery = query(
+        collection(db, "employee_payments"),
+        where("employeeId", "==", id)
+      );
+
+      const paymentSnap =
+        await getDocs(paymentQuery);
+
+      await Promise.all(
+        paymentSnap.docs.map(
+          (docItem) =>
+            deleteDoc(
+              doc(db, "employee_payments", docItem.id)
+            )
+        )
+      );
+
       await deleteDoc(
         doc(db, "employees", id)
       );
+
+      showToast("Employee Deleted", "success");
+
+      // FIX 6: Close confirm modal before navigating
+      setConfirmOpen(false);
 
       navigate("/employees");
 
@@ -531,20 +558,14 @@ if (
     try {
 
       await deleteDoc(
-        doc(
-          db,
-          "employee_income",
-          incomeId
-        )
+        doc(db, "employee_income", incomeId)
       );
 
       fetchIncome();
 
       setConfirmOpen(false);
 
-      showToast(
-        "Income Deleted"
-      );
+      showToast("Income Deleted");
 
     } catch (error) {
 
@@ -561,20 +582,14 @@ if (
     try {
 
       await deleteDoc(
-        doc(
-          db,
-          "employee_payments",
-          paymentId
-        )
+        doc(db, "employee_payments", paymentId)
       );
 
       fetchPayments();
 
       setConfirmOpen(false);
 
-      showToast(
-        "Payment Deleted"
-      );
+      showToast("Payment Deleted");
 
     } catch (error) {
 
@@ -582,64 +597,107 @@ if (
     }
   };
 
+  // =========================
   // UPDATE INCOME
+  // =========================
 
-  const updateIncome =
-  async () => {
+  const updateIncome = async () => {
 
-  try {
+    if (updating) return;
 
-    await updateDoc(
-      doc(
-        db,
-        "employee_income",
-        editingIncome.id
-      ),
-      editingIncome
-    );
+    setUpdating(true);
 
-    fetchIncome();
+    // FIX 1: Removed accidental editingPayment validation from here
+    if (!editingIncome.dailyIncome) {
+      showToast("Enter Income", "error");
+      setUpdating(false);
+      return;
+    }
 
-    setEditingIncome(null);
+    if (Number(editingIncome.dailyIncome) <= 0) {
+      showToast("Invalid Income", "error");
+      setUpdating(false);
+      return;
+    }
 
-    showToast(
-      "Income Updated"
-    );
+    try {
 
-  } catch (error) {
+      await updateDoc(
+        doc(db, "employee_income", editingIncome.id),
+        editingIncome
+      );
 
-    console.error(error);
-  }
-};
+      fetchIncome();
 
-// UPDATE PAYMENT
-const updatePayment =
-  async () => {
+      setEditingIncome(null);
 
-  try {
+      showToast("Income Updated");
 
-    await updateDoc(
-      doc(
-        db,
-        "employee_payments",
-        editingPayment.id
-      ),
-      editingPayment
-    );
+    } catch (error) {
 
-    fetchPayments();
+      console.error(error);
 
-    setEditingPayment(null);
+      showToast("Failed To Update", "error");
 
-    showToast(
-      "Payment Updated"
-    );
+    } finally {
 
-  } catch (error) {
+      setUpdating(false);
+    }
+  };
 
-    console.error(error);
-  }
-};
+  // =========================
+  // UPDATE PAYMENT
+  // =========================
+
+  const updatePayment = async () => {
+
+    if (updating) return;
+
+    setUpdating(true);
+
+    // FIX 2: Added missing validation to updatePayment
+    if (!editingPayment.amountPaid) {
+      showToast("Enter Amount", "error");
+      setUpdating(false);
+      return;
+    }
+
+    if (Number(editingPayment.amountPaid) <= 0) {
+      showToast("Invalid Amount", "error");
+      setUpdating(false);
+      return;
+    }
+
+    if (Number(editingPayment.amountPaid) > totalIncome) {
+      showToast("Payment exceeds salary", "error");
+      setUpdating(false);
+      return;
+    }
+
+    try {
+
+      await updateDoc(
+        doc(db, "employee_payments", editingPayment.id),
+        editingPayment
+      );
+
+      fetchPayments();
+
+      setEditingPayment(null);
+
+      showToast("Payment Updated");
+
+    } catch (error) {
+
+      console.error(error);
+
+      showToast("Failed To Update", "error");
+
+    } finally {
+
+      setUpdating(false);
+    }
+  };
 
   return (
 
@@ -702,11 +760,7 @@ const updatePayment =
 
             <button
               onClick={() => {
-
-                setConfirmType(
-                  "employee"
-                );
-
+                setConfirmType("employee");
                 setConfirmOpen(true);
               }}
               className="
@@ -736,346 +790,448 @@ const updatePayment =
           bg-white rounded-2xl
           p-4 shadow-sm
         ">
-
-          <p className="
-            text-xs text-slate-400
-          ">
-            Earnings
-          </p>
-
-          <h2 className="
-            text-xl font-bold mt-1
-          ">
-            ₹{totalIncome}
-          </h2>
-
+          <p className="text-xs text-slate-400">Earnings</p>
+          <h2 className="text-xl font-bold mt-1">₹{totalIncome}</h2>
         </div>
 
         <div className="
           bg-white rounded-2xl
           p-4 shadow-sm
         ">
-
-          <p className="
-            text-xs text-slate-400
-          ">
-            Paid
-          </p>
-
-          <h2 className="
-            text-xl font-bold mt-1
-          ">
-            ₹{totalPaid}
-          </h2>
-
+          <p className="text-xs text-slate-400">Paid</p>
+          <h2 className="text-xl font-bold mt-1">₹{totalPaid}</h2>
         </div>
 
         <div className="
           bg-white rounded-2xl
           p-4 shadow-sm
         ">
-
-          <p className="
-            text-xs text-slate-400
-          ">
-            Remaining
-          </p>
-
-          <h2 className="
-            text-xl font-bold mt-1
-            text-emerald-600
-          ">
-            ₹{remaining}
-          </h2>
-
+          <p className="text-xs text-slate-400">Remaining</p>
+          <h2 className="text-xl font-bold mt-1 text-emerald-600">₹{remaining}</h2>
         </div>
 
         <div className="
           bg-white rounded-2xl
           p-4 shadow-sm
         ">
-
-          <p className="
-            text-xs text-slate-400
-          ">
-            Month
-          </p>
-
+          <p className="text-xs text-slate-400">Month</p>
           <input
             type="month"
             value={selectedMonth}
             onChange={(e) =>
-              setSelectedMonth(
-                e.target.value
-              )
+              setSelectedMonth(e.target.value)
             }
-            className="
-              mt-2 text-sm
-              border rounded-xl
-              p-2 w-full
-            "
+            className="mt-2 text-sm border rounded-xl p-2 w-full"
           />
-
         </div>
 
       </div>
 
-      <div className="
-        flex flex-wrap gap-2
-      ">
+      <div className="flex flex-wrap gap-2">
 
         <TabButton
           label="Earnings"
-          active={
-            activeTab === "earnings"
-          }
-          onClick={() =>
-            setActiveTab("earnings")
-          }
+          active={activeTab === "earnings"}
+          onClick={() => setActiveTab("earnings")}
         />
 
         <TabButton
           label="Payments"
-          active={
-            activeTab === "payments"
-          }
-          onClick={() =>
-            setActiveTab("payments")
-          }
+          active={activeTab === "payments"}
+          onClick={() => setActiveTab("payments")}
         />
 
       </div>
 
       {activeTab === "earnings" && (
 
-  <Section title="Daily Earnings">
+        <Section title="Daily Earnings">
 
-    <form
-      onSubmit={saveIncome}
-      className="
-        space-y-3
-        mb-5
-      "
-    >
+          <form
+            onSubmit={saveIncome}
+            className="space-y-3 mb-5"
+          >
 
-      <div className="
-        grid
-        md:grid-cols-2
-        gap-3
-      ">
+            <div className="grid md:grid-cols-2 gap-3">
 
-        <input
-          type="date"
+              <input
+                type="date"
+                value={incomeData.incomeDate}
+                onChange={(e) =>
+                  setIncomeData({
+                    ...incomeData,
+                    incomeDate: e.target.value,
+                  })
+                }
+                className="
+                  w-full border border-slate-200
+                  rounded-2xl px-4 py-3
+                "
+              />
 
-          value={incomeData.incomeDate}
-
-          onChange={(e) =>
-            setIncomeData({
-              ...incomeData,
-              incomeDate:
-                e.target.value,
-            })
-          }
-
-          className="
-            w-full
-
-            border
-            border-slate-200
-
-            rounded-2xl
-
-            px-4 py-3
-          "
-        />
-
-        <input
-          type="number"
-
-          step="0.01"
-
-          placeholder="Daily Income"
-
-          value={incomeData.dailyIncome}
-
-          onChange={(e) =>
-            setIncomeData({
-              ...incomeData,
-              dailyIncome:
-                e.target.value,
-            })
-          }
-
-          className="
-            w-full
-
-            border
-            border-slate-200
-
-            rounded-2xl
-
-            px-4 py-3
-          "
-        />
-
-      </div>
-
-      <textarea
-        placeholder="Work Note"
-
-        value={incomeData.workNote}
-
-        onChange={(e) =>
-          setIncomeData({
-            ...incomeData,
-            workNote:
-              e.target.value,
-          })
-        }
-
-        className="
-          w-full
-
-          border
-          border-slate-200
-
-          rounded-2xl
-
-          px-4 py-3
-
-          min-h-[90px]
-        "
-      />
-
-      <button
-          type="submit"
-          disabled={saving}
-          className="
-            bg-gradient-to-r
-            from-cyan-500
-            to-blue-600
-            text-white
-            rounded-2xl
-            px-5 py-3
-            disabled:opacity-50
-            disabled:cursor-not-allowed
-          ">
-          {saving ? "Saving..." : "Save Income"}
-        </button>
-
-    </form>
-
-    <div className="
-      space-y-3
-    ">
-
-      {incomeList.map((item) => (
-
-        <div
-          key={item.id}
-
-          className="
-            bg-slate-50
-
-            border
-            border-slate-200
-
-            rounded-2xl
-
-            p-4
-          "
-        >
-
-          <div className="
-            flex
-            items-center
-            justify-between
-          ">
-
-            <div>
-
-               <h3 className="font-semibold">
-                  ₹{item.dailyIncome}
-                </h3>
-
-                <p className="
-                  text-xs
-                  text-slate-400
-                  mt-1 ">
-                  {item.incomeDate}
-                </p>
-
-              <p className="
-                text-sm
-                text-slate-500
-                mt-1
-              ">
-                {item.workNote}
-              </p>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Daily Income"
+                value={incomeData.dailyIncome}
+                onChange={(e) =>
+                  setIncomeData({
+                    ...incomeData,
+                    dailyIncome: e.target.value,
+                  })
+                }
+                className="
+                  w-full border border-slate-200
+                  rounded-2xl px-4 py-3
+                "
+              />
 
             </div>
 
-            <div className="
-              flex gap-2
-            ">
+            <textarea
+              placeholder="Work Note"
+              value={incomeData.workNote}
+              onChange={(e) =>
+                setIncomeData({
+                  ...incomeData,
+                  workNote: e.target.value,
+                })
+              }
+              className="
+                w-full border border-slate-200
+                rounded-2xl px-4 py-3 min-h-[90px]
+              "
+            />
 
-              <button
-                onClick={() =>
-                  setEditingIncome(item)
-                }
+            <button
+              type="submit"
+              disabled={saving}
+              className="
+                bg-gradient-to-r from-cyan-500 to-blue-600
+                text-white rounded-2xl px-5 py-3
+                disabled:opacity-50 disabled:cursor-not-allowed
+              "
+            >
+              {saving ? "Saving..." : "Save Income"}
+            </button>
 
+          </form>
+
+          <div className="space-y-3">
+
+            {incomeList.length === 0 && (
+              <div className="
+                bg-slate-50 border border-slate-200
+                rounded-2xl p-8 text-center
+              ">
+                <p className="text-slate-500 text-sm">No earnings found</p>
+              </div>
+            )}
+
+            {incomeList.map((item) => (
+
+              <div
+                key={item.id}
                 className="
-                  h-9 w-9
-
-                  flex
-                  items-center
-                  justify-center
-
-                  rounded-xl
-
-                  bg-blue-100
-                  text-blue-700
+                  bg-slate-50 border border-slate-200
+                  rounded-2xl p-4
                 "
               >
 
-                <i className="
-                  fa-solid
-                  fa-pen-to-square
-                "></i>
+                <div className="flex items-center justify-between">
 
+                  <div>
+                    <h3 className="font-semibold">₹{item.dailyIncome}</h3>
+                    <p className="text-xs text-slate-400 mt-1">{item.incomeDate}</p>
+                    <p className="text-sm text-slate-500 mt-1">{item.workNote}</p>
+                  </div>
+
+                  <div className="flex gap-2">
+
+                    <button
+                      onClick={() => setEditingIncome(item)}
+                      className="
+                        h-9 w-9 flex items-center justify-center
+                        rounded-xl bg-blue-100 text-blue-700
+                      "
+                    >
+                      <i className="fa-solid fa-pen-to-square"></i>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setDeleteId(item.id);
+                        setConfirmType("income");
+                        setConfirmOpen(true);
+                      }}
+                      className="
+                        h-9 w-9 flex items-center justify-center
+                        rounded-xl bg-rose-100 text-rose-700
+                      "
+                    >
+                      <i className="fa-solid fa-trash"></i>
+                    </button>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            ))}
+
+          </div>
+
+        </Section>
+
+      )}
+
+      {activeTab === "payments" && (
+
+        <Section title="Payments">
+
+          <form
+            onSubmit={savePayment}
+            className="space-y-3 mb-5"
+          >
+
+            <div className="grid md:grid-cols-2 gap-3">
+
+              <input
+                type="date"
+                value={paymentData.paymentDate}
+                onChange={(e) =>
+                  setPaymentData({
+                    ...paymentData,
+                    paymentDate: e.target.value,
+                  })
+                }
+                className="
+                  w-full border border-slate-200
+                  rounded-2xl px-4 py-3
+                "
+              />
+
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Amount Paid"
+                value={paymentData.amountPaid}
+                onChange={(e) =>
+                  setPaymentData({
+                    ...paymentData,
+                    amountPaid: e.target.value,
+                  })
+                }
+                className="
+                  w-full border border-slate-200
+                  rounded-2xl px-4 py-3
+                "
+              />
+
+            </div>
+
+            {/* FIX 8 (Optional): Payment method dropdown instead of free text */}
+            <select
+              value={paymentData.paymentMethod}
+              onChange={(e) =>
+                setPaymentData({
+                  ...paymentData,
+                  paymentMethod: e.target.value,
+                })
+              }
+              className="
+                w-full border border-slate-200
+                rounded-2xl px-4 py-3 bg-white
+              "
+            >
+              <option value="Cash">Cash</option>
+              <option value="UPI">UPI</option>
+              <option value="Bank">Bank</option>
+              <option value="Card">Card</option>
+            </select>
+
+            <textarea
+              placeholder="Payment Note"
+              value={paymentData.paymentNote}
+              onChange={(e) =>
+                setPaymentData({
+                  ...paymentData,
+                  paymentNote: e.target.value,
+                })
+              }
+              className="
+                w-full border border-slate-200
+                rounded-2xl px-4 py-3 min-h-[90px]
+              "
+            />
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="
+                bg-gradient-to-r from-cyan-500 to-blue-600
+                text-white rounded-2xl px-5 py-3
+                disabled:opacity-50 disabled:cursor-not-allowed
+              "
+            >
+              {saving ? "Saving..." : "Save Payment"}
+            </button>
+
+          </form>
+
+          <div className="space-y-3">
+
+            {/* FIX 5: Was incorrectly checking incomeList.length, now correctly paymentList.length */}
+            {paymentList.length === 0 && (
+              <div className="
+                bg-slate-50 border border-slate-200
+                rounded-2xl p-8 text-center
+              ">
+                <p className="text-slate-500 text-sm">No payments found</p>
+              </div>
+            )}
+
+            {paymentList.map((item) => (
+
+              <div
+                key={item.id}
+                className="
+                  bg-slate-50 border border-slate-200
+                  rounded-2xl p-4
+                "
+              >
+
+                <div className="flex items-center justify-between">
+
+                  <div>
+                    <h3 className="font-semibold">₹{item.amountPaid}</h3>
+                    <p className="text-xs text-slate-400 mt-1">{item.paymentDate}</p>
+                    <p className="text-sm text-slate-500 mt-1">{item.paymentMethod}</p>
+                    {/* FIX 9 (Optional): Show payment note if present */}
+                    {item.paymentNote ? (
+                      <p className="text-xs text-slate-400 mt-1">{item.paymentNote}</p>
+                    ) : null}
+                  </div>
+
+                  <div className="flex gap-2">
+
+                    <button
+                      onClick={() => setEditingPayment(item)}
+                      className="
+                        h-9 w-9 flex items-center justify-center
+                        rounded-xl bg-blue-100 text-blue-700
+                      "
+                    >
+                      <i className="fa-solid fa-pen-to-square"></i>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setDeleteId(item.id);
+                        setConfirmType("payment");
+                        setConfirmOpen(true);
+                      }}
+                      className="
+                        h-9 w-9 flex items-center justify-center
+                        rounded-xl bg-rose-100 text-rose-700
+                      "
+                    >
+                      <i className="fa-solid fa-trash"></i>
+                    </button>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            ))}
+
+          </div>
+
+        </Section>
+
+      )}
+
+      {/* EDIT INCOME MODAL */}
+      {editingIncome && (
+
+        <div className="
+          fixed inset-0 bg-black/40 backdrop-blur-sm
+          z-50 flex items-center justify-center p-4
+        ">
+
+          <div className="
+            bg-white rounded-3xl p-5
+            w-full max-w-md space-y-3
+          ">
+
+            <h2 className="text-lg font-semibold">Edit Income</h2>
+
+            <input
+              type="date"
+              value={editingIncome.incomeDate}
+              onChange={(e) =>
+                setEditingIncome({
+                  ...editingIncome,
+                  incomeDate: e.target.value,
+                })
+              }
+              className="
+                w-full border border-slate-200
+                rounded-2xl px-4 py-3
+              "
+            />
+
+            <input
+              type="number"
+              value={editingIncome.dailyIncome}
+              onChange={(e) =>
+                setEditingIncome({
+                  ...editingIncome,
+                  dailyIncome: e.target.value,
+                })
+              }
+              className="
+                w-full border border-slate-200
+                rounded-2xl px-4 py-3
+              "
+            />
+
+            <textarea
+              value={editingIncome.workNote}
+              onChange={(e) =>
+                setEditingIncome({
+                  ...editingIncome,
+                  workNote: e.target.value,
+                })
+              }
+              className="
+                w-full border border-slate-200
+                rounded-2xl px-4 py-3 min-h-[90px]
+              "
+            />
+
+            <div className="flex gap-2">
+
+              <button
+                onClick={updateIncome}
+                disabled={updating}
+                className="
+                  flex-1 bg-blue-600 text-white
+                  rounded-2xl py-3
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                "
+              >
+                {updating ? "Saving..." : "Save"}
               </button>
 
               <button
-                onClick={() => {
-
-                  setDeleteId(item.id);
-
-                  setConfirmType(
-                    "income"
-                  );
-
-                  setConfirmOpen(true);
-                }}
-
-                className="
-                  h-9 w-9
-
-                  flex
-                  items-center
-                  justify-center
-
-                  rounded-xl
-
-                  bg-rose-100
-                  text-rose-700
-                "
+                onClick={() => setEditingIncome(null)}
+                className="flex-1 bg-slate-100 rounded-2xl py-3"
               >
-
-                <i className="
-                  fa-solid
-                  fa-trash
-                "></i>
-
+                Cancel
               </button>
 
             </div>
@@ -1084,273 +1240,91 @@ const updatePayment =
 
         </div>
 
-      ))}
+      )}
 
-    </div>
+      {/* EDIT EMPLOYEE MODAL */}
+      {editingEmployee && (
 
-  </Section>
-
-)}
-
-{activeTab === "payments" && (
-
-  <Section title="Payments">
-
-    <form
-      onSubmit={savePayment}
-      className="
-        space-y-3
-        mb-5
-      "
-    >
-
-      <div className="
-        grid
-        md:grid-cols-2
-        gap-3
-      ">
-
-        <input
-          type="date"
-
-          value={paymentData.paymentDate}
-
-          onChange={(e) =>
-            setPaymentData({
-              ...paymentData,
-              paymentDate:
-                e.target.value,
-            })
-          }
-
-          className="
-            w-full
-
-            border
-            border-slate-200
-
-            rounded-2xl
-
-            px-4 py-3
-          "
-        />
-
-        <input
-          type="number"
-
-          step="0.01"
-
-          placeholder="Amount Paid"
-
-          value={paymentData.amountPaid}
-
-          onChange={(e) =>
-            setPaymentData({
-              ...paymentData,
-              amountPaid:
-                e.target.value,
-            })
-          }
-
-          className="
-            w-full
-
-            border
-            border-slate-200
-
-            rounded-2xl
-
-            px-4 py-3
-          "
-        />
-
-      </div>
-
-      <input
-        type="text"
-
-        placeholder="Payment Method"
-
-        value={paymentData.paymentMethod}
-
-        onChange={(e) =>
-          setPaymentData({
-            ...paymentData,
-            paymentMethod:
-              e.target.value,
-          })
-        }
-
-        className="
-          w-full
-
-          border
-          border-slate-200
-
-          rounded-2xl
-
-          px-4 py-3
-        "
-      />
-
-      <textarea
-        placeholder="Payment Note"
-
-        value={paymentData.paymentNote}
-
-        onChange={(e) =>
-          setPaymentData({
-            ...paymentData,
-            paymentNote:
-              e.target.value,
-          })
-        }
-
-        className="
-          w-full
-
-          border
-          border-slate-200
-
-          rounded-2xl
-
-          px-4 py-3
-
-          min-h-[90px]
-        "
-      />
-
-      <button
-        type="submit"
-
-        className="
-          bg-gradient-to-r
-          from-cyan-500
-          to-blue-600
-
-          text-white
-
-          rounded-2xl
-
-          px-5 py-3
-        "
-      >
-        Save Payment
-      </button>
-
-    </form>
-
-    <div className="
-      space-y-3
-    ">
-
-      {paymentList.map((item) => (
-
-        <div
-          key={item.id}
-
-          className="
-            bg-slate-50
-
-            border
-            border-slate-200
-
-            rounded-2xl
-
-            p-4
-          "
-        >
+        <div className="
+          fixed inset-0 bg-black/40 backdrop-blur-sm
+          z-50 flex items-center justify-center p-4
+        ">
 
           <div className="
-            flex
-            items-center
-            justify-between
+            bg-white rounded-3xl p-5
+            w-full max-w-md space-y-4
           ">
 
-            <div>
+            <div className="flex items-center justify-between">
 
-              <h3 className="
-                font-semibold
-              ">
-                ₹{item.amountPaid}
-              </h3>
+              <div>
+                <h2 className="text-lg font-semibold">Edit Employee</h2>
+                <p className="text-sm text-slate-500 mt-1">Update employee details</p>
+              </div>
 
-              <p className="text-xs
-                 text-slate-400 mt-1">
-                {item.paymentDate}
-              </p>
-
-              <p className="
-                text-sm
-                text-slate-500
-                mt-1
-              ">
-                {item.paymentMethod}
-              </p>
+              <button
+                onClick={() => setEditingEmployee(false)}
+                className="
+                  h-9 w-9 flex items-center justify-center
+                  rounded-xl bg-slate-100
+                "
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
 
             </div>
 
-            <div className="
-              flex gap-2
-            ">
+            <input
+              type="text"
+              placeholder="Employee Name"
+              value={editEmployeeData.name}
+              onChange={(e) =>
+                setEditEmployeeData({
+                  ...editEmployeeData,
+                  name: e.target.value.replace(/[^a-zA-Z ]/g, ""),
+                })
+              }
+              className="
+                w-full border border-slate-200
+                rounded-2xl px-4 py-3
+              "
+            />
+
+            <input
+              type="text"
+              placeholder="Mobile Number"
+              value={editEmployeeData.mobile}
+              onChange={(e) =>
+                setEditEmployeeData({
+                  ...editEmployeeData,
+                  mobile: e.target.value.replace(/[^0-9]/g, ""),
+                })
+              }
+              className="
+                w-full border border-slate-200
+                rounded-2xl px-4 py-3
+              "
+            />
+
+            <div className="flex gap-2">
 
               <button
-                onClick={() =>
-                  setEditingPayment(item)
-                }
-
+                onClick={updateEmployee}
+                disabled={updating}
                 className="
-                  h-9 w-9
-
-                  flex
-                  items-center
-                  justify-center
-
-                  rounded-xl
-
-                  bg-blue-100
-                  text-blue-700
+                  flex-1 bg-gradient-to-r from-cyan-500 to-blue-600
+                  text-white rounded-2xl py-3
+                  disabled:opacity-50 disabled:cursor-not-allowed
                 "
               >
-
-                <i className="
-                  fa-solid
-                  fa-pen-to-square
-                "></i>
-
+                {updating ? "Saving..." : "Save Changes"}
               </button>
 
               <button
-                onClick={() => {
-
-                  setDeleteId(item.id);
-
-                  setConfirmType(
-                    "payment"
-                  );
-
-                  setConfirmOpen(true);
-                }}
-
-                className="
-                  h-9 w-9
-
-                  flex
-                  items-center
-                  justify-center
-
-                  rounded-xl
-
-                  bg-rose-100
-                  text-rose-700
-                "
+                onClick={() => setEditingEmployee(false)}
+                className="flex-1 bg-slate-100 rounded-2xl py-3"
               >
-
-                <i className="
-                  fa-solid
-                  fa-trash
-                "></i>
-
+                Cancel
               </button>
 
             </div>
@@ -1359,354 +1333,7 @@ const updatePayment =
 
         </div>
 
-      ))}
-
-    </div>
-
-  </Section>
-
-)}
-
-    {editingIncome && (
-
-  <div className="
-    fixed inset-0
-
-    bg-black/40
-    backdrop-blur-sm
-
-    z-50
-
-    flex items-center
-    justify-center
-
-    p-4
-  ">
-
-    <div className="
-      bg-white
-
-      rounded-3xl
-
-      p-5
-
-      w-full
-      max-w-md
-
-      space-y-3
-    ">
-
-      <h2 className="
-        text-lg
-        font-semibold
-      ">
-        Edit Income
-      </h2>
-
-      <input
-        type="date"
-
-        value={editingIncome.incomeDate}
-
-        onChange={(e) =>
-          setEditingIncome({
-            ...editingIncome,
-            incomeDate:
-              e.target.value,
-          })
-        }
-
-        className="
-          w-full
-
-          border
-          border-slate-200
-
-          rounded-2xl
-
-          px-4 py-3
-        "
-      />
-
-      <input
-        type="number"
-
-        value={editingIncome.dailyIncome}
-
-        onChange={(e) =>
-          setEditingIncome({
-            ...editingIncome,
-            dailyIncome:
-              e.target.value,
-          })
-        }
-
-        className="
-          w-full
-
-          border
-          border-slate-200
-
-          rounded-2xl
-
-          px-4 py-3
-        "
-      />
-
-      <textarea
-        value={editingIncome.workNote}
-
-        onChange={(e) =>
-          setEditingIncome({
-            ...editingIncome,
-            workNote:
-              e.target.value,
-          })
-        }
-
-        className="
-          w-full
-
-          border
-          border-slate-200
-
-          rounded-2xl
-
-          px-4 py-3
-
-          min-h-[90px]
-        "
-      />
-
-      <div className="
-        flex gap-2
-      ">
-
-        <button
-          onClick={updateIncome}
-
-          className="
-            flex-1
-
-            bg-blue-600
-            text-white
-
-            rounded-2xl
-
-            py-3
-          "
-        >
-          Save
-        </button>
-
-        <button
-          onClick={() =>
-            setEditingIncome(null)
-          }
-
-          className="
-            flex-1
-
-            bg-slate-100
-
-            rounded-2xl
-
-            py-3
-          "
-        >
-          Cancel
-        </button>
-
-      </div>
-
-    </div>
-
-  </div>
-
-)}
-
-  {editingEmployee && (
-
-  <div className="
-    fixed inset-0
-
-    bg-black/40
-    backdrop-blur-sm
-
-    z-50
-
-    flex items-center
-    justify-center
-
-    p-4
-  ">
-
-    <div className="
-      bg-white
-
-      rounded-3xl
-
-      p-5
-
-      w-full
-      max-w-md
-
-      space-y-4
-    ">
-
-      <div className="
-        flex
-        items-center
-        justify-between
-      ">
-
-        <div>
-
-          <h2 className="
-            text-lg
-            font-semibold
-          ">
-            Edit Employee
-          </h2>
-
-          <p className="
-            text-sm
-            text-slate-500
-            mt-1
-          ">
-            Update employee details
-          </p>
-
-        </div>
-
-        <button
-          onClick={() =>
-            setEditingEmployee(false)
-          }
-
-          className="
-            h-9 w-9
-
-            flex
-            items-center
-            justify-center
-
-            rounded-xl
-
-            bg-slate-100
-          "
-        >
-
-          <i className="
-            fa-solid
-            fa-xmark
-          "></i>
-
-        </button>
-
-      </div>
-
-      <input
-        type="text"
-
-        placeholder="Employee Name"
-
-        value={editEmployeeData.name}
-
-        onChange={(e) =>
-          setEditEmployeeData({
-            ...editEmployeeData,
-            name: e.target.value,
-          })
-        }
-
-        className="
-          w-full
-
-          border
-          border-slate-200
-
-          rounded-2xl
-
-          px-4 py-3
-        "
-      />
-
-      <input
-        type="text"
-
-        placeholder="Mobile Number"
-
-        value={editEmployeeData.mobile}
-
-        onChange={(e) =>
-          setEditEmployeeData({
-            ...editEmployeeData,
-            mobile: e.target.value,
-          })
-        }
-
-        className="
-          w-full
-
-          border
-          border-slate-200
-
-          rounded-2xl
-
-          px-4 py-3
-        "
-      />
-
-      <div className="
-        flex gap-2
-      ">
-
-        <button
-          onClick={updateEmployee}
-
-          className="
-            flex-1
-
-            bg-gradient-to-r
-            from-cyan-500
-            to-blue-600
-
-            text-white
-
-            rounded-2xl
-
-            py-3
-          "
-        >
-          Save Changes
-        </button>
-
-        <button
-          onClick={() =>
-            setEditingEmployee(false)
-          }
-
-          className="
-            flex-1
-
-            bg-slate-100
-
-            rounded-2xl
-
-            py-3
-          "
-        >
-          Cancel
-        </button>
-
-      </div>
-
-    </div>
-
-  </div>
-
-)}
+      )}
 
       <ConfirmModal
         open={confirmOpen}
@@ -1714,221 +1341,127 @@ const updatePayment =
         message="Deleting employee will also remove salary history and payment records."
         danger={true}
         confirmText="Delete"
-        onCancel={() =>
-          setConfirmOpen(false)
-        }
+        onCancel={() => setConfirmOpen(false)}
         onConfirm={() => {
-
-          if (
-            confirmType === "employee"
-          ) {
-            deleteEmployee();
-          }
-
-          if (
-            confirmType === "income"
-          ) {
-            deleteIncome(deleteId);
-          }
-
-          if (
-            confirmType === "payment"
-          ) {
-            deletePayment(deleteId);
-          }
+          if (confirmType === "employee") deleteEmployee();
+          if (confirmType === "income") deleteIncome(deleteId);
+          if (confirmType === "payment") deletePayment(deleteId);
         }}
       />
 
+      {/* EDIT PAYMENT MODAL */}
       {editingPayment && (
 
-  <div className="
-    fixed inset-0
+        <div className="
+          fixed inset-0 bg-black/40 backdrop-blur-sm
+          z-50 flex items-center justify-center p-4
+        ">
 
-    bg-black/40
-    backdrop-blur-sm
+          <div className="
+            bg-white rounded-3xl p-5
+            w-full max-w-md space-y-3
+          ">
 
-    z-50
+            <h2 className="text-lg font-semibold">Edit Payment</h2>
 
-    flex items-center
-    justify-center
+            <input
+              type="date"
+              value={editingPayment.paymentDate}
+              onChange={(e) =>
+                setEditingPayment({
+                  ...editingPayment,
+                  paymentDate: e.target.value,
+                })
+              }
+              className="
+                w-full border border-slate-200
+                rounded-2xl px-4 py-3
+              "
+            />
 
-    p-4
-  ">
+            <input
+              type="number"
+              value={editingPayment.amountPaid}
+              onChange={(e) =>
+                setEditingPayment({
+                  ...editingPayment,
+                  amountPaid: e.target.value,
+                })
+              }
+              className="
+                w-full border border-slate-200
+                rounded-2xl px-4 py-3
+              "
+            />
 
-    <div className="
-      bg-white
+            {/* FIX 8 (Optional): Dropdown in edit modal too */}
+            <select
+              value={editingPayment.paymentMethod}
+              onChange={(e) =>
+                setEditingPayment({
+                  ...editingPayment,
+                  paymentMethod: e.target.value,
+                })
+              }
+              className="
+                w-full border border-slate-200
+                rounded-2xl px-4 py-3 bg-white
+              "
+            >
+              <option value="Cash">Cash</option>
+              <option value="UPI">UPI</option>
+              <option value="Bank">Bank</option>
+              <option value="Card">Card</option>
+            </select>
 
-      rounded-3xl
+            <textarea
+              value={editingPayment.paymentNote}
+              onChange={(e) =>
+                setEditingPayment({
+                  ...editingPayment,
+                  paymentNote: e.target.value,
+                })
+              }
+              className="
+                w-full border border-slate-200
+                rounded-2xl px-4 py-3 min-h-[90px]
+              "
+            />
 
-      p-5
+            <div className="flex gap-2">
 
-      w-full
-      max-w-md
+              <button
+                onClick={updatePayment}
+                disabled={updating}
+                className="
+                  flex-1 bg-blue-600 text-white
+                  rounded-2xl py-3
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                "
+              >
+                {updating ? "Saving..." : "Save"}
+              </button>
 
-      space-y-3
-    ">
+              <button
+                onClick={() => setEditingPayment(null)}
+                className="flex-1 bg-slate-100 rounded-2xl py-3"
+              >
+                Cancel
+              </button>
 
-      <h2 className="
-        text-lg
-        font-semibold
-      ">
-        Edit Payment
-      </h2>
+            </div>
 
-      <input
-        type="date"
+          </div>
 
-        value={editingPayment.paymentDate}
+        </div>
 
-        onChange={(e) =>
-          setEditingPayment({
-            ...editingPayment,
-            paymentDate:
-              e.target.value,
-          })
-        }
-
-        className="
-          w-full
-
-          border
-          border-slate-200
-
-          rounded-2xl
-
-          px-4 py-3
-        "
-      />
-
-      <input
-        type="number"
-
-        value={editingPayment.amountPaid}
-
-        onChange={(e) =>
-          setEditingPayment({
-            ...editingPayment,
-            amountPaid:
-              e.target.value,
-          })
-        }
-
-        className="
-          w-full
-
-          border
-          border-slate-200
-
-          rounded-2xl
-
-          px-4 py-3
-        "
-      />
-
-      <input
-        type="text"
-
-        value={editingPayment.paymentMethod}
-
-        onChange={(e) =>
-          setEditingPayment({
-            ...editingPayment,
-            paymentMethod:
-              e.target.value,
-          })
-        }
-
-        className="
-          w-full
-
-          border
-          border-slate-200
-
-          rounded-2xl
-
-          px-4 py-3
-        "
-      />
-
-      <textarea
-        value={editingPayment.paymentNote}
-
-        onChange={(e) =>
-          setEditingPayment({
-            ...editingPayment,
-            paymentNote:
-              e.target.value,
-          })
-        }
-
-        className="
-          w-full
-
-          border
-          border-slate-200
-
-          rounded-2xl
-
-          px-4 py-3
-
-          min-h-[90px]
-        "
-      />
-
-      <div className="
-        flex gap-2
-      ">
-
-        <button
-          onClick={updatePayment}
-
-          className="
-            flex-1
-
-            bg-blue-600
-            text-white
-
-            rounded-2xl
-
-            py-3
-          "
-        >
-          Save
-        </button>
-
-        <button
-          onClick={() =>
-            setEditingPayment(null)
-          }
-
-          className="
-            flex-1
-
-            bg-slate-100
-
-            rounded-2xl
-
-            py-3
-          "
-        >
-          Cancel
-        </button>
-
-      </div>
-
-    </div>
-
-  </div>
-
-)}
+      )}
 
       <Toast
         open={toastOpen}
         message={toastMessage}
         type={toastType}
-        onClose={() =>
-          setToastOpen(false)
-        }
+        onClose={() => setToastOpen(false)}
       />
 
     </div>
