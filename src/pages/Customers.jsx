@@ -286,7 +286,7 @@ export default function Customers() {
           Customers
         </h1>
         <p className="text-sm text-gray-500 mt-1">
-          Manage tailor customers
+          Manage your customers
         </p>
       </div>
 
@@ -397,6 +397,16 @@ export default function Customers() {
                   <p className="text-sm text-gray-500 mt-1">
                     {customer.mobile}
                   </p>
+
+                  
+                  <span className="
+                  text-xs bg-green-100 text-green-700
+                  px-2 py-1 rounded-lg
+                ">
+                  {customer.active ? "Active" : "Inactive"}
+                </span>
+
+
                 </div>
               </div>
 
