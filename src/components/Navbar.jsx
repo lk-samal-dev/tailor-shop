@@ -33,7 +33,7 @@ export default function Navbar({
             ☰
           </button>
 
-          <div>
+          <div className="lg:hidden">
 
             <h1 className="
               text-lg md:text-xl
@@ -45,7 +45,7 @@ export default function Navbar({
             <p className="
               text-xs text-gray-400
             ">
-              Shop Management
+              Mr Pradip Mohapatra
             </p>
 
           </div>

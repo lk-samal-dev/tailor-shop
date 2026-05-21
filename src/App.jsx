@@ -30,9 +30,13 @@ export default function App() {
 
         {/* NAVBAR */}
 
-        <Navbar
-          setSidebarOpen={setSidebarOpen}
-        />
+        <div className="lg:hidden">
+
+          <Navbar
+            setSidebarOpen={setSidebarOpen}
+          />
+
+        </div>
 
         <div className="flex">
 

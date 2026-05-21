@@ -93,11 +93,11 @@ export default function Sidebar({
               Nice Creation
             </h2>
 
-            <p className="
-              text-xs text-gray-400
-            ">
-              Business Suite
+            
+            <p className="text-xs text-gray-400"> 
+             Mr Pradip Mohapatra
             </p>
+            
 
           </div>
 

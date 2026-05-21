@@ -246,7 +246,7 @@ export default function Dashboard() {
             text-gray-500
             mt-1
           ">
-            Nice Creation Tailor
+            Welcome back, Mr. Pradip !!
           </p>
 
         </div>

@@ -14,6 +14,42 @@ import { db } from "../firebase/config";
 
 import Toast from "../components/Toast";
 
+// ============================================================
+// CENTRAL CONFIG IMPORT
+// ============================================================
+// Adding / removing fields in measurementFields.js
+// automatically updates form, validation, and saved data here.
+// ============================================================
+
+import { measurementFields } from "../utils/measurementFields";
+
+// ========================================
+// HELPERS — build initial form state from config
+// ========================================
+
+/**
+ * Returns a flat object with every field key → "" across ALL tabs,
+ * plus the fixed meta fields (phone, name, measurementDate, note).
+ * Used for initial state and post-save reset.
+ */
+function buildEmptyFormData() {
+  const measurementKeys = {};
+
+  Object.values(measurementFields).forEach((fields) => {
+    fields.forEach(({ key }) => {
+      measurementKeys[key] = "";
+    });
+  });
+
+  return {
+    phone: "",
+    name: "",
+    measurementDate: new Date().toISOString().split("T")[0],
+    note: "",
+    ...measurementKeys,
+  };
+}
+
 // ========================================
 // FIELD COMPONENT
 // ========================================
@@ -30,23 +66,19 @@ function Field({
 
   const handleInput = (e) => {
 
-    let value = e.target.value;
+    let val = e.target.value;
 
-    value = value.replace(
-      /[^0-9./ ]/g,
-      ""
-    );
+    val = val.replace(/[^0-9./ ]/g, "");
 
     onChange({
       target: {
         name,
-        value,
+        value: val,
       },
     });
   };
 
   return (
-
     <div>
 
       <label className="
@@ -74,40 +106,24 @@ function Field({
         onChange={handleInput}
 
         onKeyDown={(e) => {
-
-          if (
-            e.key === "Enter" &&
-            onNext
-          ) {
-
+          if (e.key === "Enter" && onNext) {
             e.preventDefault();
-
             onNext();
           }
         }}
 
-        placeholder={
-          placeholder || "e.g. 20.5"
-        }
+        placeholder={placeholder || "e.g. 20.5"}
 
         className="
           w-full
-
           border border-gray-200
-
           bg-white
-
           rounded-xl
-
           px-3 py-2.5
-
           text-sm
-
           outline-none
-
           focus:ring-2
           focus:ring-blue-500
-
           transition
         "
       />
@@ -115,6 +131,35 @@ function Field({
     </div>
   );
 }
+
+// ========================================
+// TAB STYLE MAP
+// ========================================
+
+const tabStyles = {
+  kamij: {
+    bg: "bg-[#f5f9ff]",
+    border: "border-blue-100",
+    titleColor: "text-blue-700",
+    title: "Kamij Measurements",
+  },
+  pant: {
+    bg: "bg-[#fffaf5]",
+    border: "border-orange-100",
+    titleColor: "text-orange-700",
+    title: "Pant Measurements",
+  },
+  blouse: {
+    bg: "bg-[#fff7fb]",
+    border: "border-pink-100",
+    titleColor: "text-pink-700",
+    title: "Blouse Measurements",
+  },
+};
+
+// ========================================
+// MAIN COMPONENT
+// ========================================
 
 export default function SmartMeasurement() {
 
@@ -124,114 +169,57 @@ export default function SmartMeasurement() {
 
   const [activeTab, setActiveTab] =
     useState(
-      localStorage.getItem(
-        "lastMeasurementTab"
-      ) || "kamij"
+      localStorage.getItem("lastMeasurementTab") || "kamij"
     );
 
-  const [customerFound,
-    setCustomerFound] =
+  const [customerFound, setCustomerFound] =
     useState(false);
 
-  const [measurementCount,
-    setMeasurementCount] =
+  const [measurementCount, setMeasurementCount] =
     useState(0);
 
-  const [customerId,
-    setCustomerId] =
+  const [customerId, setCustomerId] =
     useState(null);
 
-  const [loading,
-    setLoading] =
+  const [loading, setLoading] =
     useState(false);
 
-  const [saving,
-    setSaving] =
+  const [saving, setSaving] =
     useState(false);
 
-  const [toastOpen,
-    setToastOpen] =
+  const [toastOpen, setToastOpen] =
     useState(false);
 
-  const [toastMessage,
-    setToastMessage] =
+  const [toastMessage, setToastMessage] =
     useState("");
 
-  const [toastType,
-    setToastType] =
+  const [toastType, setToastType] =
     useState("success");
 
   const location = useLocation();
 
-  const customerData =
-    location.state;
+  const customerData = location.state;
 
   // ========================================
   // REFS
   // ========================================
 
-  const fieldRefs =
-    useRef([]);
+  const fieldRefs = useRef([]);
 
   // ========================================
-  // FORM DATA
+  // FORM DATA — built dynamically from config
   // ========================================
 
   const [formData, setFormData] =
-    useState({
-
-      phone: "",
-      name: "",
-
-      measurementDate:
-        new Date()
-          .toISOString()
-          .split("T")[0],
-
-      note: "",
-
-      // KAMIJ
-
-      shoulder: "",
-      chest: "",
-      upperChest: "",
-      waist: "",
-      hip: "",
-      length: "",
-      sleeve: "",
-      bicep: "",
-
-      // PANT
-
-      pantWaist: "",
-      pantLength: "",
-      thigh: "",
-      knee: "",
-      mori: "",
-
-      // BLOUSE
-
-      blouseLength: "",
-      blouseChest: "",
-      blouseWaist: "",
-      frontNeck: "",
-      backNeck: "",
-      blouseSleeve: "",
-    });
+    useState(buildEmptyFormData);
 
   // ========================================
   // TOAST
   // ========================================
 
-  const showToast = (
-    message,
-    type = "success"
-  ) => {
-
+  const showToast = (message, type = "success") => {
     setToastMessage(message);
-
     setToastType(type);
-
     setToastOpen(true);
   };
 
@@ -244,25 +232,14 @@ export default function SmartMeasurement() {
     if (customerData) {
 
       setFormData((prev) => ({
-
         ...prev,
-
-        phone:
-          customerData.customerPhone || "",
-
-        name:
-          customerData.customerName || "",
+        phone: customerData.customerPhone || "",
+        name: customerData.customerName || "",
       }));
 
-      setCustomerId(
-        customerData.customerId
-      );
-
+      setCustomerId(customerData.customerId);
       setCustomerFound(true);
-
-      fetchMeasurementCount(
-        customerData.customerId
-      );
+      fetchMeasurementCount(customerData.customerId);
     }
 
   }, []);
@@ -272,12 +249,7 @@ export default function SmartMeasurement() {
   // ========================================
 
   useEffect(() => {
-
-    localStorage.setItem(
-      "lastMeasurementTab",
-      activeTab
-    );
-
+    localStorage.setItem("lastMeasurementTab", activeTab);
   }, [activeTab]);
 
   // ========================================
@@ -286,35 +258,22 @@ export default function SmartMeasurement() {
 
   useEffect(() => {
 
-    const handleBeforeUnload =
-      (e) => {
+    const handleBeforeUnload = (e) => {
 
-      const hasChanges =
-        Object.values(formData)
-          .some(
-            (value) =>
-              value !== ""
-          );
+      const hasChanges = Object.values(formData).some(
+        (value) => value !== ""
+      );
 
       if (hasChanges) {
-
         e.preventDefault();
-
         e.returnValue = "";
       }
     };
 
-    window.addEventListener(
-      "beforeunload",
-      handleBeforeUnload
-    );
+    window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
-
-      window.removeEventListener(
-        "beforeunload",
-        handleBeforeUnload
-      );
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
 
   }, [formData]);
@@ -325,18 +284,12 @@ export default function SmartMeasurement() {
 
   const handleChange = (e) => {
 
-    const { name } =
-      e.target;
+    const { name } = e.target;
 
-    let value =
-      e.target.value;
+    let value = e.target.value;
 
     if (name === "name") {
-
-      value = value.replace(
-        /[^a-zA-Z ]/g,
-        ""
-      );
+      value = value.replace(/[^a-zA-Z ]/g, "");
     }
 
     setFormData((prev) => ({
@@ -349,36 +302,25 @@ export default function SmartMeasurement() {
   // CUSTOMER SEARCH
   // ========================================
 
-  const checkCustomer =
-    async (mobile) => {
+  const checkCustomer = async (mobile) => {
 
-    if (mobile.length < 10)
-      return;
+    if (mobile.length < 10) return;
 
     try {
 
       const q = query(
         collection(db, "customers"),
-        where(
-          "mobile",
-          "==",
-          mobile
-        )
+        where("mobile", "==", mobile)
       );
 
-      const querySnapshot =
-        await getDocs(q);
+      const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
 
-        const customer =
-          querySnapshot.docs[0];
-
-        const data =
-          customer.data();
+        const customer = querySnapshot.docs[0];
+        const data = customer.data();
 
         setCustomerFound(true);
-
         setCustomerId(customer.id);
 
         setFormData((prev) => ({
@@ -387,41 +329,23 @@ export default function SmartMeasurement() {
         }));
 
         const mq = query(
-          collection(
-            db,
-            "measurements"
-          ),
-          where(
-            "customerId",
-            "==",
-            customer.id
-          )
+          collection(db, "measurements"),
+          where("customerId", "==", customer.id)
         );
 
-        const ms =
-          await getDocs(mq);
+        const ms = await getDocs(mq);
 
-        setMeasurementCount(
-          ms.size
-        );
+        setMeasurementCount(ms.size);
 
       } else {
-
         setCustomerFound(false);
-
         setCustomerId(null);
-
         setMeasurementCount(0);
       }
 
     } catch (error) {
-
       console.error(error);
-
-      showToast(
-        "Network Error",
-        "error"
-      );
+      showToast("Network Error", "error");
     }
   };
 
@@ -429,32 +353,20 @@ export default function SmartMeasurement() {
   // FETCH COUNT
   // ========================================
 
-  const fetchMeasurementCount =
-    async (id) => {
+  const fetchMeasurementCount = async (id) => {
 
     try {
 
       const mq = query(
-        collection(
-          db,
-          "measurements"
-        ),
-        where(
-          "customerId",
-          "==",
-          id
-        )
+        collection(db, "measurements"),
+        where("customerId", "==", id)
       );
 
-      const ms =
-        await getDocs(mq);
+      const ms = await getDocs(mq);
 
-      setMeasurementCount(
-        ms.size
-      );
+      setMeasurementCount(ms.size);
 
     } catch (error) {
-
       console.error(error);
     }
   };
@@ -463,14 +375,9 @@ export default function SmartMeasurement() {
   // PHONE CHANGE
   // ========================================
 
-  const handlePhoneChange =
-    async (e) => {
+  const handlePhoneChange = async (e) => {
 
-    const value =
-      e.target.value.replace(
-        /[^0-9]/g,
-        ""
-      );
+    const value = e.target.value.replace(/[^0-9]/g, "");
 
     setFormData((prev) => ({
       ...prev,
@@ -478,7 +385,6 @@ export default function SmartMeasurement() {
     }));
 
     if (value.length >= 10) {
-
       checkCustomer(value);
     }
   };
@@ -487,139 +393,73 @@ export default function SmartMeasurement() {
   // RANGE VALIDATION
   // ========================================
 
-  const validateMeasurement =
-    (value) => {
+  const validateMeasurement = (value) => {
 
-    const number =
-      parseFloat(value);
+    const number = parseFloat(value);
 
-    if (
-      isNaN(number)
-    ) return false;
+    if (isNaN(number)) return false;
 
-    return (
-      number >= 1 &&
-      number <= 100
-    );
+    return number >= 1 && number <= 100;
   };
 
   // ========================================
   // SAVE
   // ========================================
 
-  const handleSubmit =
-    async () => {
+  const handleSubmit = async () => {
 
-    if (
-      !formData.phone.trim()
-    ) {
-
-      showToast(
-        "Enter Phone Number",
-        "error"
-      );
-
+    if (!formData.phone.trim()) {
+      showToast("Enter Phone Number", "error");
       return;
     }
 
-    if (
-      !/^[0-9]{10}$/.test(
-        formData.phone
-      )
-    ) {
-
-      showToast(
-        "Enter valid 10 digit phone number",
-        "error"
-      );
-
+    if (!/^[0-9]{10}$/.test(formData.phone)) {
+      showToast("Enter valid 10 digit phone number", "error");
       return;
     }
 
-    if (
-      !formData.name.trim()
-    ) {
-
-      showToast(
-        "Enter Customer Name",
-        "error"
-      );
-
+    if (!formData.name.trim()) {
+      showToast("Enter Customer Name", "error");
       return;
     }
 
-    const requiredFields = {
+    // ----------------------------------------
+    // DYNAMIC REQUIRED VALIDATION from config
+    // ----------------------------------------
 
-      kamij: [
-        "shoulder",
-        "chest",
-        "length",
-      ],
+    const requiredFields = measurementFields[activeTab]
+      .filter((f) => f.required)
+      .map((f) => f.key);
 
-      pant: [
-        "pantWaist",
-        "pantLength",
-      ],
+    const missingField = requiredFields.find(
+      (key) => !formData[key]?.trim()
+    );
 
-      blouse: [
-        "blouseChest",
-        "blouseLength",
-      ],
-    };
-
-    const missing =
-      requiredFields[
-        activeTab
-      ].find(
-        (field) =>
-          !formData[field]
-            ?.trim()
+    if (missingField) {
+      // Find human-readable label for the missing key
+      const fieldConfig = measurementFields[activeTab].find(
+        (f) => f.key === missingField
       );
-
-    if (missing) {
-
-      showToast(
-        `Enter ${missing}`,
-        "error"
-      );
-
+      showToast(`Enter ${fieldConfig?.label || missingField}`, "error");
       return;
     }
 
-    // RANGE CHECK
+    // ----------------------------------------
+    // RANGE CHECK — all non-meta filled fields
+    // ----------------------------------------
 
-    const invalidField =
-      Object.entries(formData)
-        .find(
-          ([key, value]) => {
+    const metaKeys = ["name", "phone", "measurementDate", "note"];
 
-            if (
-              [
-                "name",
-                "phone",
-                "measurementDate",
-                "note",
-              ].includes(key)
-            ) {
-
-              return false;
-            }
-
-            if (!value) return false;
-
-            return !validateMeasurement(
-              value
-            );
-          }
-        );
+    const invalidField = Object.entries(formData).find(
+      ([key, value]) => {
+        if (metaKeys.includes(key)) return false;
+        if (!value) return false;
+        return !validateMeasurement(value);
+      }
+    );
 
     if (invalidField) {
-
-      showToast(
-        `${invalidField[0]} value looks invalid`,
-        "error"
-      );
-
+      showToast(`${invalidField[0]} value looks invalid`, "error");
       return;
     }
 
@@ -628,313 +468,121 @@ export default function SmartMeasurement() {
     try {
 
       setSaving(true);
-
       setLoading(true);
 
-      let finalCustomerId =
-        customerId;
+      let finalCustomerId = customerId;
 
-      // ========================================
-      // SAME DAY WARNING
-      // ========================================
+      // ----------------------------------------
+      // SAME DAY DUPLICATE WARNING
+      // ----------------------------------------
 
       if (customerFound) {
 
-        const sameDayQuery =
-          query(
-            collection(
-              db,
-              "measurements"
-            ),
-            where(
-              "customerId",
-              "==",
-              customerId
-            ),
-            where(
-              "measurementDate",
-              "==",
-              formData.measurementDate
-            ),
-            where(
-              "type",
-              "==",
-              activeTab
-            )
-          );
+        const sameDayQuery = query(
+          collection(db, "measurements"),
+          where("customerId", "==", customerId),
+          where("measurementDate", "==", formData.measurementDate),
+          where("type", "==", activeTab)
+        );
 
-        const sameDayResult =
-          await getDocs(
-            sameDayQuery
-          );
+        const sameDayResult = await getDocs(sameDayQuery);
 
-        if (
-          !sameDayResult.empty
-        ) {
-
-          showToast(
-            "Measurement already exists for today",
-            "error"
-          );
-
+        if (!sameDayResult.empty) {
+          showToast("Measurement already exists for today", "error");
           setSaving(false);
-
           setLoading(false);
-
           return;
         }
       }
 
-      // ========================================
-      // CREATE CUSTOMER
-      // ========================================
+      // ----------------------------------------
+      // CREATE CUSTOMER if new
+      // ----------------------------------------
 
       if (!customerFound) {
 
-        const customerRef =
-          await addDoc(
-            collection(
-              db,
-              "customers"
-            ),
-            {
-              name:
-                formData.name.trim(),
+        const customerRef = await addDoc(
+          collection(db, "customers"),
+          {
+            name: formData.name.trim(),
+            mobile: formData.phone.trim(),
+            createdAt: new Date(),
+          }
+        );
 
-              mobile:
-                formData.phone.trim(),
-
-              createdAt:
-                new Date(),
-            }
-          );
-
-        finalCustomerId =
-          customerRef.id;
+        finalCustomerId = customerRef.id;
       }
 
-      let measurementData =
-        {};
+      // ----------------------------------------
+      // BUILD measurementData DYNAMICALLY from config
+      // ----------------------------------------
 
-      // ========================================
-      // KAMIJ
-      // ========================================
+      const measurementData = {};
 
-      if (
-        activeTab === "kamij"
-      ) {
+      measurementFields[activeTab].forEach(({ key }) => {
+        measurementData[key] = formData[key] || "";
+      });
 
-        measurementData = {
-
-          shoulder:
-            formData.shoulder,
-
-          chest:
-            formData.chest,
-
-          upperChest:
-            formData.upperChest,
-
-          waist:
-            formData.waist,
-
-          hip:
-            formData.hip,
-
-          length:
-            formData.length,
-
-          sleeve:
-            formData.sleeve,
-
-          bicep:
-            formData.bicep,
-        };
-      }
-
-      // ========================================
-      // PANT
-      // ========================================
-
-      if (
-        activeTab === "pant"
-      ) {
-
-        measurementData = {
-
-          pantWaist:
-            formData.pantWaist,
-
-          pantLength:
-            formData.pantLength,
-
-          thigh:
-            formData.thigh,
-
-          knee:
-            formData.knee,
-
-          mori:
-            formData.mori,
-        };
-      }
-
-      // ========================================
-      // BLOUSE
-      // ========================================
-
-      if (
-        activeTab === "blouse"
-      ) {
-
-        measurementData = {
-
-          blouseLength:
-            formData.blouseLength,
-
-          blouseChest:
-            formData.blouseChest,
-
-          blouseWaist:
-            formData.blouseWaist,
-
-          frontNeck:
-            formData.frontNeck,
-
-          backNeck:
-            formData.backNeck,
-
-          blouseSleeve:
-            formData.blouseSleeve,
-        };
-      }
-
-      // ========================================
+      // ----------------------------------------
       // SAVE
-      // ========================================
+      // ----------------------------------------
 
       await addDoc(
-        collection(
-          db,
-          "measurements"
-        ),
+        collection(db, "measurements"),
         {
-          customerId:
-            finalCustomerId,
-
-          customerName:
-            formData.name.trim(),
-
-          customerPhone:
-            formData.phone.trim(),
-
+          customerId: finalCustomerId,
+          customerName: formData.name.trim(),
+          customerPhone: formData.phone.trim(),
           type: activeTab,
-
-          measurementDate:
-            formData.measurementDate,
-
-          note:
-            formData.note.trim(),
-
+          measurementDate: formData.measurementDate,
+          note: formData.note.trim(),
           data: measurementData,
-
-          createdAt:
-            new Date(),
+          createdAt: new Date(),
         }
       );
 
-      showToast(
-        "Measurement Saved Successfully"
-      );
+      showToast("Measurement Saved Successfully");
 
-      // RESET
+      // ----------------------------------------
+      // RESET FORM
+      // ----------------------------------------
 
-     setFormData({
+      setFormData(buildEmptyFormData());
 
-  phone: "",
-  name: "",
-
-  measurementDate:
-    new Date()
-      .toISOString()
-      .split("T")[0],
-
-  note: "",
-
-  // KAMIJ
-
-  shoulder: "",
-  chest: "",
-  upperChest: "",
-  waist: "",
-  hip: "",
-  length: "",
-  sleeve: "",
-  bicep: "",
-
-  // PANT
-
-  pantWaist: "",
-  pantLength: "",
-  thigh: "",
-  knee: "",
-  mori: "",
-
-  // BLOUSE
-
-  blouseLength: "",
-  blouseChest: "",
-  blouseWaist: "",
-  frontNeck: "",
-  backNeck: "",
-  blouseSleeve: "",
-});
-
-setCustomerFound(false);
-
-setCustomerId(null);
-
-setMeasurementCount(0);
-
-      setMeasurementCount(
-        (prev) => prev + 1
-      );
+      setCustomerFound(false);
+      setCustomerId(null);
+      setMeasurementCount(0);
+      setMeasurementCount((prev) => prev + 1);
 
       setTimeout(() => {
-
-        fieldRefs.current[0]
-          ?.focus();
-
+        fieldRefs.current[0]?.focus();
       }, 100);
 
     } catch (error) {
 
       console.error(error);
-
-      showToast(
-        "Error saving measurement",
-        "error"
-      );
+      showToast("Error saving measurement", "error");
 
     } finally {
 
       setLoading(false);
-
       setSaving(false);
     }
   };
 
   // ========================================
-  // FIELD NAVIGATION
+  // KEYBOARD NAVIGATION
   // ========================================
 
-  const focusNext =
-    (index) => {
-
-    fieldRefs.current[
-      index + 1
-    ]?.focus();
+  const focusNext = (index) => {
+    fieldRefs.current[index + 1]?.focus();
   };
+
+  // ========================================
+  // ACTIVE TAB STYLE
+  // ========================================
+
+  const style = tabStyles[activeTab] || tabStyles.kamij;
 
   // ========================================
   // UI
@@ -945,11 +593,8 @@ setMeasurementCount(0);
     <div className="
       pb-28
       space-y-4
-
       min-h-screen
-
       bg-[#f5f7fb]
-
       text-gray-800
     ">
 
@@ -957,16 +602,11 @@ setMeasurementCount(0);
 
       <div>
 
-        <h1 className="
-          text-xl md:text-2xl
-          font-bold
-        ">
+        <h1 className="text-xl md:text-2xl font-bold">
           Measurements
         </h1>
 
-        <p className="
-          text-sm text-gray-500 mt-1
-        ">
+        <p className="text-sm text-gray-500 mt-1">
           Fast tailor workflow
         </p>
 
@@ -982,37 +622,21 @@ setMeasurementCount(0);
         p-4
       ">
 
-        <div className="
-          grid grid-cols-2
-          gap-3
-        ">
+        <div className="grid grid-cols-2 gap-3">
 
           <div>
 
-            <label className="
-              text-xs text-gray-500
-              mb-1 block
-            ">
+            <label className="text-xs text-gray-500 mb-1 block">
               Customer Phone
             </label>
 
             <input
               type="text"
-
               inputMode="numeric"
-
               maxLength={10}
-
               value={formData.phone}
-
-              onChange={
-                handlePhoneChange
-              }
-
-              placeholder="
-                Customer Phone
-              "
-
+              onChange={handlePhoneChange}
+              placeholder="Customer Phone"
               className="
                 w-full
                 border border-gray-200
@@ -1026,26 +650,16 @@ setMeasurementCount(0);
 
           <div>
 
-            <label className="
-              text-xs text-gray-500
-              mb-1 block
-            ">
+            <label className="text-xs text-gray-500 mb-1 block">
               Name
             </label>
 
             <input
               type="text"
-
               name="name"
-
               value={formData.name}
-
               onChange={handleChange}
-
-              placeholder="
-                Customer Name
-              "
-
+              placeholder="Customer Name"
               className="
                 w-full
                 border border-gray-200
@@ -1059,33 +673,21 @@ setMeasurementCount(0);
 
         </div>
 
-        {/* STATUS */}
+        {/* STATUS BADGES */}
 
         {formData.phone && (
 
-          <div className="
-            flex flex-wrap
-            gap-2 mt-4
-          ">
+          <div className="flex flex-wrap gap-2 mt-4">
 
             <div className={`
               px-3 py-1.5
               rounded-full
               text-xs font-medium
-
-              ${
-                customerFound
-
+              ${customerFound
                 ? "bg-green-100 text-green-700"
-
-                : "bg-blue-100 text-blue-700"
-              }
+                : "bg-blue-100 text-blue-700"}
             `}>
-
-              {customerFound
-                ? "Existing Customer"
-                : "New Customer"}
-
+              {customerFound ? "Existing Customer" : "New Customer"}
             </div>
 
             {customerFound && (
@@ -1094,15 +696,10 @@ setMeasurementCount(0);
                 px-3 py-1.5
                 rounded-full
                 text-xs font-medium
-
                 bg-[#e8edf7]
                 text-gray-700
               ">
-
-                {measurementCount}
-                {" "}
-                Measurements
-
+                {measurementCount} Measurements
               </div>
 
             )}
@@ -1113,7 +710,7 @@ setMeasurementCount(0);
 
       </div>
 
-      {/* TYPE */}
+      {/* TYPE TABS */}
 
       <div className="
         bg-[#e8edf7]
@@ -1124,54 +721,26 @@ setMeasurementCount(0);
       ">
 
         {[
-          {
-            key: "kamij",
-            label: "Kamij"
-          },
-
-          {
-            key: "pant",
-            label: "Pant"
-          },
-
-          {
-            key: "blouse",
-            label: "Blouse"
-          },
-
+          { key: "kamij", label: "Kamij" },
+          { key: "pant",  label: "Pant"  },
+          { key: "blouse",label: "Blouse"},
         ].map((tab) => (
 
           <button
             key={tab.key}
-
-            onClick={() =>
-              setActiveTab(tab.key)
-            }
-
+            onClick={() => setActiveTab(tab.key)}
             className={`
               flex-1
-
               py-2.5
-
               rounded-xl
-
-              text-sm
-              font-semibold
-
+              text-sm font-semibold
               transition-all
-
-              ${
-                activeTab === tab.key
-
+              ${activeTab === tab.key
                 ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm"
-
-                : "text-gray-600 hover:bg-white/70"
-              }
+                : "text-gray-600 hover:bg-white/70"}
             `}
           >
-
             {tab.label}
-
           </button>
 
         ))}
@@ -1188,30 +757,16 @@ setMeasurementCount(0);
         p-4
       ">
 
-        <label className="
-          text-xs text-gray-500
-          mb-1 block
-        ">
+        <label className="text-xs text-gray-500 mb-1 block">
           Measurement Date
         </label>
 
         <input
           type="date"
-
-          max={
-            new Date()
-              .toISOString()
-              .split("T")[0]
-          }
-
+          max={new Date().toISOString().split("T")[0]}
           name="measurementDate"
-
-          value={
-            formData.measurementDate
-          }
-
+          value={formData.measurementDate}
           onChange={handleChange}
-
           className="
             w-full
             border border-gray-200
@@ -1233,286 +788,105 @@ setMeasurementCount(0);
         p-4
       ">
 
-        <label className="
-          text-xs text-gray-500
-          mb-1 block
-        ">
+        <label className="text-xs text-gray-500 mb-1 block">
           Additional Note
         </label>
 
         <textarea
           name="note"
-
           value={formData.note}
-
           onChange={handleChange}
-
-          placeholder="
-            Cloth note, design note, delivery note...
-          "
-
+          placeholder="Cloth note, design note, delivery note..."
           className="
             w-full
-
             border border-gray-200
-
             rounded-xl
-
             px-3 py-3
-
             text-sm
-
             min-h-[90px]
-
             resize-none
           "
         />
 
       </div>
 
-      {/* KAMIJ */}
+      {/* ============================================================
+          DYNAMIC MEASUREMENT FIELDS
+          Renders based on measurementFields[activeTab] config.
+          Adding/removing fields in measurementFields.js is all it takes.
+          ============================================================ */}
 
-      {activeTab === "kamij" && (
+      <div className={`
+        ${style.bg}
+        rounded-2xl
+        border ${style.border}
+        shadow-sm
+        p-4
+      `}>
 
-        <div className="
-          bg-[#f5f9ff]
+        <h2 className={`text-sm font-semibold mb-4 ${style.titleColor}`}>
+          {style.title}
+        </h2>
 
-          rounded-2xl
+        <div className="grid grid-cols-2 gap-3">
 
-          border border-blue-100
+          {measurementFields[activeTab].map((field, index) => (
 
-          shadow-sm
+            <Field
+              key={field.key}
 
-          p-4
-        ">
+              label={
+                field.label +
+                (field.required ? " *" : "")
+              }
 
-          <h2 className="
-            text-sm
-            font-semibold
+              name={field.key}
 
-            mb-4
+              value={formData[field.key] ?? ""}
 
-            text-blue-700
-          ">
-            Kamij Measurements
-          </h2>
+              onChange={handleChange}
 
-          <div className="
-            grid
-            grid-cols-2
+              placeholder={field.placeholder}
 
-            gap-3
-          ">
+              inputRef={(el) =>
+                (fieldRefs.current[index] = el)
+              }
 
-            {[
-              ["Shoulder", "shoulder"],
-              ["Chest", "chest"],
-              ["Upper Chest", "upperChest"],
-              ["Waist", "waist"],
-              ["Hip", "hip"],
-              ["Length", "length"],
-              ["Sleeve", "sleeve"],
-              ["Bicep", "bicep"],
-            ].map(
-              ([label, name], index) => (
+              onNext={() => focusNext(index)}
+            />
 
-              <Field
-                key={name}
-
-                label={label}
-
-                name={name}
-
-                value={formData[name]}
-
-                onChange={handleChange}
-
-                inputRef={(el) =>
-                  fieldRefs.current[index] = el
-                }
-
-                onNext={() =>
-                  focusNext(index)
-                }
-              />
-
-            ))}
-
-          </div>
+          ))}
 
         </div>
 
-      )}
+      </div>
 
-      {/* PANT */}
-
-      {activeTab === "pant" && (
-
-        <div className="
-          bg-[#fffaf5]
-          rounded-2xl
-          border border-orange-100
-          shadow-sm
-          p-4
-        ">
-
-          <h2 className="
-            text-sm font-semibold
-            mb-4 text-orange-700
-          ">
-            Pant Measurements
-          </h2>
-
-          <div className="
-            grid grid-cols-2
-            gap-3
-          ">
-
-            {[
-              ["Waist", "pantWaist"],
-              ["Length", "pantLength"],
-              ["Thigh", "thigh"],
-              ["Knee", "knee"],
-              ["Mori", "mori"],
-            ].map(
-              ([label, name], index) => (
-
-              <Field
-                key={name}
-
-                label={label}
-
-                name={name}
-
-                value={formData[name]}
-
-                onChange={handleChange}
-
-                inputRef={(el) =>
-                  fieldRefs.current[index] = el
-                }
-
-                onNext={() =>
-                  focusNext(index)
-                }
-              />
-
-            ))}
-
-          </div>
-
-        </div>
-
-      )}
-
-      {/* BLOUSE */}
-
-      {activeTab === "blouse" && (
-
-        <div className="
-          bg-[#fff7fb]
-          rounded-2xl
-          border border-pink-100
-          shadow-sm
-          p-4
-        ">
-
-          <h2 className="
-            text-sm font-semibold
-            mb-4 text-pink-700
-          ">
-            Blouse Measurements
-          </h2>
-
-          <div className="
-            grid grid-cols-2
-            gap-3
-          ">
-
-            {[
-              ["Length", "blouseLength"],
-              ["Chest", "blouseChest"],
-              ["Waist", "blouseWaist"],
-              ["Front Neck", "frontNeck"],
-              ["Back Neck", "backNeck"],
-              ["Sleeve", "blouseSleeve"],
-            ].map(
-              ([label, name], index) => (
-
-              <Field
-                key={name}
-
-                label={label}
-
-                name={name}
-
-                value={formData[name]}
-
-                onChange={handleChange}
-
-                inputRef={(el) =>
-                  fieldRefs.current[index] = el
-                }
-
-                onNext={() =>
-                  focusNext(index)
-                }
-              />
-
-            ))}
-
-          </div>
-
-        </div>
-
-      )}
-
-      {/* SAVE */}
+      {/* SAVE BUTTON */}
 
       <div className="
-        fixed bottom-0 left-0
-        right-0
-
+        fixed bottom-0 left-0 right-0
         bg-white
         border-t border-gray-200
-
         p-3
-
         z-50
       ">
 
         <button
           onClick={handleSubmit}
-
-          disabled={
-            loading || saving
-          }
-
+          disabled={loading || saving}
           className="
             w-full
-
             bg-blue-600
             hover:bg-blue-700
-
             disabled:opacity-60
-
             text-white
-
             rounded-2xl
-
             py-3
-
-            text-sm
-            font-semibold
-
+            text-sm font-semibold
             transition
           "
         >
-
-          {loading || saving
-            ? "Saving..."
-            : "Save Measurement"}
-
+          {loading || saving ? "Saving..." : "Save Measurement"}
         </button>
 
       </div>
@@ -1523,9 +897,7 @@ setMeasurementCount(0);
         open={toastOpen}
         message={toastMessage}
         type={toastType}
-        onClose={() =>
-          setToastOpen(false)
-        }
+        onClose={() => setToastOpen(false)}
       />
 
     </div>
